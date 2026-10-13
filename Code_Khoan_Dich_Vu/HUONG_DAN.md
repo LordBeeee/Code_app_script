@@ -1,0 +1,66 @@
+# Cài đặt Apps Script tạo hợp đồng khoán dịch vụ
+
+## 1. Chuẩn bị Google Docs mẫu
+
+Trong tài liệu mẫu, thay nội dung bôi vàng bằng các biến sau:
+
+| Nội dung trong mẫu | Biến thay thế |
+|---|---|
+| Phần số hợp đồng `141026-01/LASHE` | `{{SO_HD}}` |
+| Ngày ký `14/07/2026` | `{{NGAY_LAM_DON}}` |
+| Họ và tên Bên B | `{{HO_TEN}}` |
+| Số CCCD | `{{SO_CCCD}}` |
+| Mã số thuế | `{{MA_SO_THUE}}` |
+| Địa chỉ | `{{DIA_CHI}}` |
+| Số điện thoại | `{{SO_DIEN_THOAI}}` |
+| Tên Brand | `{{TEN_BRAND}}` |
+| Tên dự án | `{{TEN_DU_AN}}` |
+| Số lượng tại câu “Sản xuất ... Video” | `{{SO_LUONG_CONG_VIEC}}` |
+| Nội dung kịch bản | `{{NOI_DUNG_KICH_BAN}}` |
+| Số lượng kịch bản | `{{SO_LUONG_KICH_BAN}}` |
+| Số lượng video | `{{SO_LUONG_VIDEO}}` |
+| Khung video | `{{KHUNG_VIDEO}}` |
+| Chất lượng video | `{{CHAT_LUONG_VIDEO}}` |
+| Thời lượng video | `{{THOI_LUONG_VIDEO}}` |
+| Hiệu ứng video | `{{HIEU_UNG_VIDEO}}` |
+| Nội dung diễn viên | `{{NOI_DUNG_DIEN_VIEN}}` |
+| Số lượng diễn viên | `{{SO_LUONG_DIEN_VIEN}}` |
+| Ngày hoàn thành | `{{NGAY_HOAN_THANH}}` |
+| Tổng thù lao | `{{TONG_THU_LAO}}` |
+| Tổng thù lao bằng chữ | `{{TONG_THU_LAO_BANG_CHU}}` |
+
+Nếu ngày trong mẫu được viết tách riêng, có thể dùng:
+
+- Ngày ký: `{{NGAY}}`, `{{THANG}}`, `{{NAM}}`
+- Ngày hoàn thành: `{{NGAY_HT}}`, `{{THANG_HT}}`, `{{NAM_HT}}`
+
+Giữ nguyên định dạng chữ của phần bôi vàng khi thay bằng biến. Không chèn kiểu chữ khác nhau vào giữa một biến.
+
+## 2. Cài code
+
+1. Mở **Tiện ích mở rộng → Apps Script** từ Google Sheet.
+2. Xóa hàm `myFunction` và dán toàn bộ nội dung file `code.gs`.
+3. Bấm **Lưu**.
+4. Chọn hàm `caiDatHeThong` và bấm **Chạy** một lần.
+5. Chấp nhận quyền truy cập Google Sheets, Docs và Drive.
+6. Tải lại Google Sheet.
+
+Sau khi cài đặt, cột W/X/Y chứa ba link hợp đồng và cột Z có checkbox **TẠO WORD**.
+
+## 3. Sử dụng
+
+Điền đầy đủ dữ liệu từ cột B đến V, gồm Tên Brand tại cột H, rồi tích checkbox tại cột Z. Thiếu bất kỳ trường nào thì script không cấp số hợp đồng và không tạo tài liệu. Cột A do Apps Script tự sinh theo mẫu `DDMMYY-NN/BRAND`; không đặt công thức tại cột A.
+
+Ví dụ ngày làm đơn `14/07/2026`, Brand `LASHE`:
+
+- Hợp đồng đầu tiên: `140726-01/LASHE`
+- Hợp đồng tiếp theo cùng ngày và Brand: `140726-02/LASHE`
+- Brand khác trong cùng ngày sẽ bắt đầu lại từ `01`.
+
+Bộ đếm chỉ xét những dòng đã có ít nhất một link Word tại W:Y. Dòng có số ở cột A nhưng chưa có link không được tính. Nếu tạo lại cùng một dòng đã có link, số hợp đồng được giữ nguyên.
+
+Khi tạo lại lần 2 hoặc lần 3 trên cùng một dòng, số hợp đồng ở cột A được giữ nguyên. Link được ghi lần lượt vào cột W, X và Y.
+
+Nếu code báo không tìm thấy thư mục, mở thư mục đích trên Drive, sao chép chuỗi nằm sau `/folders/` trong URL và thay giá trị `FOLDER_ID` ở đầu file `code.gs`.
+
+Lưu ý phân biệt chữ `I` hoa và chữ `l` thường trong ID. ID lấy từ ảnh hiện tại là `1FCIPy1gl88pMOlUn4ZtgPIPYflzzmNg`.
