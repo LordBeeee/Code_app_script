@@ -4,6 +4,9 @@
  * A:V - Dữ liệu hợp đồng (H là Tên Brand)
  * W:Y - Link Word lần 01, 02, 03
  * Z   - Checkbox tạo Word
+ * AA  - Tải PDF/JPG/PNG FILE CỨNG
+ * AB  - Link FILE CỨNG
+ * AC  - Trạng thái nghiệp vụ (không do code này xử lý)
  *
  * Trước khi sử dụng, thay các phần bôi vàng trong Google Docs mẫu bằng
  * các biến {{...}} được liệt kê trong TEMPLATE_FIELDS ở cuối file.
@@ -19,11 +22,56 @@ const CONFIG = {
   // Nếu Drive báo không tìm thấy thư mục, hãy dán lại ID thư mục vào đây.
   FOLDER_ID: '1FCIPy1gl88pMOlUnn4ZtgPIPYflzzmNg',
 
+  // Sau khi triển khai Web App, dán URL kết thúc bằng /exec vào đây.
+  WEB_APP_URL: 'https://script.google.com/a/macros/getvini.com/s/AKfycby5CqdBQn8biRP4iWmNywuF3lxUIwQDSvgWF7uvMx6BMoiUOGCquB2371RjpsV8lTqb/exec',
+
   FIRST_LINK_COLUMN: 23, // W
   LINK_COUNT: 3,         // W, X, Y
   ACTION_COLUMN: 26,     // Z
-  LINK_PROTECTION_DESCRIPTION: 'KHOA_LINK_HOP_DONG_TU_DONG'
+  LINK_PROTECTION_DESCRIPTION: 'KHOA_LINK_HOP_DONG_TU_DONG',
+  HARD_FILE_PROTECTION_DESCRIPTION: 'KHOA_FILE_CUNG_HOP_DONG_TU_DONG',
+  HARD_UPLOAD_COLUMN: 27, // AA
+  HARD_LINK_COLUMN: 28,   // AB
+  UPLOAD_MAX_SIZE_MB: 10
 };
+
+
+// ========================================
+// 0. TRANG WEB TẢI FILE CỨNG
+// Tái sử dụng cùng cơ chế với Đề nghị thanh toán.
+// ========================================
+
+function doGet(e) {
+  const loai = String(e && e.parameter && e.parameter.loai || '');
+  const row = Number(e && e.parameter && e.parameter.row || 0);
+
+  if (loai !== 'FILE_CUNG' || !Number.isInteger(row) || row < 2) {
+    return HtmlService.createHtmlOutput(
+      '<h3>Đường link upload không hợp lệ.</h3>'
+    );
+  }
+
+  const ss = laySpreadsheet_();
+  const activeEmail = layEmailNguoiDung_();
+  const ownerEmail = layEmailChuSoHuu_(ss);
+
+  if (activeEmail !== ownerEmail) {
+    return HtmlService.createHtmlOutput(
+      '<h3>Bạn không có quyền tải FILE CỨNG.</h3>' +
+      '<p>Chỉ chủ sở hữu bảng tính được thực hiện thao tác này.</p>'
+    );
+  }
+
+  const template = HtmlService.createTemplateFromFile('UploadPDF');
+  template.loai = loai;
+  template.row = row;
+  template.tieuDe = 'FILE CỨNG';
+  template.maxSizeMb = CONFIG.UPLOAD_MAX_SIZE_MB;
+  template.webMode = true;
+
+  return template.evaluate()
+    .setTitle('Tải tệp - FILE CỨNG - Dòng ' + row);
+}
 
 
 // ========================================
@@ -35,12 +83,14 @@ function onOpen() {
     .createMenu('Tạo hợp đồng')
     .addItem('Cài đặt hệ thống', 'caiDatHeThong')
     .addItem('Tạo hợp đồng cho dòng đang chọn', 'taoHopDongDongDangChon')
+    .addSeparator()
+    .addItem('Tải FILE CỨNG cho dòng đang chọn', 'moTaiFileCung')
     .addToUi();
 }
 
 /**
  * Chạy hàm này đúng một lần sau khi dán code.
- * Hàm sẽ tạo tiêu đề W:Z, checkbox ở Z và installable onEdit trigger.
+ * Hàm tạo W:Z, FILE CỨNG tại AA:AB và installable onEdit trigger.
  */
 function caiDatHeThong() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -61,6 +111,11 @@ function caiDatHeThong() {
   DocumentApp.openById(templateId).getBody();
   DriveApp.getFolderById(CONFIG.FOLDER_ID).getName();
 
+  PropertiesService.getScriptProperties().setProperty(
+    'SPREADSHEET_ID',
+    ss.getId()
+  );
+
   xoaCongThucSttCu_(sheet);
 
   sheet.getRange('W1:Z1').setValues([[
@@ -68,6 +123,10 @@ function caiDatHeThong() {
     'Link_Word_02',
     'Link_Word_03',
     'TẠO WORD'
+  ]]);
+  sheet.getRange('AA1:AB1').setValues([[
+    'FILE CỨNG',
+    'Link_FILE_Cung'
   ]]);
 
   const maxRows = sheet.getMaxRows();
@@ -86,10 +145,12 @@ function caiDatHeThong() {
       .setBackground('#E8F5E9');
 
     khoaCotLink_(sheet, maxRows);
+    taoNutUploadPdf_(sheet, maxRows);
   }
 
   sheet.setColumnWidths(CONFIG.FIRST_LINK_COLUMN, CONFIG.LINK_COUNT, 180);
   sheet.setColumnWidth(CONFIG.ACTION_COLUMN, 120);
+  sheet.setColumnWidths(CONFIG.HARD_UPLOAD_COLUMN, 2, 180);
 
   ScriptApp.getProjectTriggers()
     .filter(trigger => trigger.getHandlerFunction() === 'xuLyTaoHopDong')
@@ -101,10 +162,224 @@ function caiDatHeThong() {
     .create();
 
   ss.toast(
-    'Đã tạo checkbox cột Z và trigger tự động.',
+    coLinkWebAppHopLe_()
+      ? 'Đã tạo checkbox Z và nút tải FILE CỨNG tại AA.'
+      : 'Đã cài hợp đồng. Hãy triển khai Web App và điền WEB_APP_URL để tạo nút AA.',
     'Cài đặt thành công',
-    6
+    8
   );
+}
+
+function coLinkWebAppHopLe_() {
+  return /^https:\/\/script\.google\.com\/(?:macros\/s|a\/macros\/[^/]+\/s)\/[^/?#]+\/exec(?:[?#].*)?$/
+    .test(String(CONFIG.WEB_APP_URL || '').trim());
+}
+
+/** Dùng lại mẫu nút upload của Đề nghị thanh toán, chỉ tạo FILE CỨNG. */
+function taoNutUploadPdf_(sheet, maxRows) {
+  if (!coLinkWebAppHopLe_() || maxRows < 2) return;
+
+  const buttons = [];
+  const baseUrl = String(CONFIG.WEB_APP_URL).trim();
+
+  for (let row = 2; row <= maxRows; row++) {
+    const uploadUrl = baseUrl + '?loai=FILE_CUNG&row=' + row;
+
+    buttons.push([
+      SpreadsheetApp.newRichTextValue()
+        .setText('⬆ TẢI FILE CỨNG')
+        .setLinkUrl(uploadUrl)
+        .build()
+    ]);
+  }
+
+  sheet.getRange(2, CONFIG.HARD_UPLOAD_COLUMN, maxRows - 1, 1)
+    .setRichTextValues(buttons)
+    .setHorizontalAlignment('center')
+    .setFontWeight('bold')
+    .setFontColor('#1155CC')
+    .setBackground('#E8F0FE');
+}
+
+function moTaiFileCung() {
+  moHopThoaiTaiPdf_('FILE_CUNG');
+}
+
+/** Dùng lại hộp thoại upload của Đề nghị thanh toán. */
+function moHopThoaiTaiPdf_(loai) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getActiveSheet();
+  const ui = SpreadsheetApp.getUi();
+
+  if (layEmailNguoiDung_() !== layEmailChuSoHuu_(ss)) {
+    ui.alert('Chỉ chủ sở hữu bảng tính được tải FILE CỨNG.');
+    return;
+  }
+
+  if (sheet.getName() !== CONFIG.SHEET_NAME) {
+    ui.alert('Hãy mở tab ' + CONFIG.SHEET_NAME + ' trước.');
+    return;
+  }
+
+  const activeRange = sheet.getActiveRange();
+  const row = activeRange ? activeRange.getRow() : 0;
+
+  if (row < 2) {
+    ui.alert('Hãy chọn một ô tại dòng dữ liệu cần tải tệp.');
+    return;
+  }
+
+  const template = HtmlService.createTemplateFromFile('UploadPDF');
+  template.loai = loai;
+  template.row = row;
+  template.tieuDe = 'FILE CỨNG';
+  template.maxSizeMb = CONFIG.UPLOAD_MAX_SIZE_MB;
+  template.webMode = false;
+
+  const html = template.evaluate()
+    .setWidth(440)
+    .setHeight(330);
+
+  ui.showModalDialog(html, 'Tải FILE CỨNG - Dòng ' + row);
+}
+
+/**
+ * Hàm được gọi trực tiếp từ UploadPDF.html.
+ * FILE CỨNG được lưu chung thư mục với các bản hợp đồng của dòng đó.
+ */
+function luuPdfTuMayTinh(payload) {
+  if (!payload || !payload.base64) {
+    throw new Error('Không nhận được dữ liệu tệp.');
+  }
+
+  const row = Number(payload.row);
+  const loai = String(payload.loai || '');
+  const originalName = String(payload.fileName || '').trim();
+  const mimeType = String(payload.mimeType || '').toLowerCase();
+
+  if (!Number.isInteger(row) || row < 2) {
+    throw new Error('Dòng tải tệp không hợp lệ.');
+  }
+
+  if (loai !== 'FILE_CUNG') {
+    throw new Error('Loại tệp không hợp lệ.');
+  }
+
+  const allowedMimeTypes = [
+    'application/pdf',
+    'image/jpeg',
+    'image/png'
+  ];
+  const allowedExtensions = ['.pdf', '.jpg', '.jpeg', '.png'];
+  const lowerName = originalName.toLowerCase();
+
+  if (
+    !allowedMimeTypes.includes(mimeType) ||
+    !allowedExtensions.some(extension => lowerName.endsWith(extension))
+  ) {
+    throw new Error('Chỉ được tải lên PDF, JPG hoặc PNG.');
+  }
+
+  const bytes = Utilities.base64Decode(payload.base64);
+  const maxBytes = CONFIG.UPLOAD_MAX_SIZE_MB * 1024 * 1024;
+
+  if (bytes.length > maxBytes) {
+    throw new Error(
+      'Tệp vượt quá ' + CONFIG.UPLOAD_MAX_SIZE_MB + ' MB.'
+    );
+  }
+
+  const ss = laySpreadsheet_();
+  const sheet = ss.getSheetByName(CONFIG.SHEET_NAME);
+
+  if (!sheet) {
+    throw new Error('Không tìm thấy tab: ' + CONFIG.SHEET_NAME);
+  }
+
+  if (layEmailNguoiDung_() !== layEmailChuSoHuu_(ss)) {
+    throw new Error('Chỉ chủ sở hữu bảng tính được tải FILE CỨNG.');
+  }
+
+  const currentLink = String(
+    sheet.getRange(row, CONFIG.HARD_LINK_COLUMN).getDisplayValue() || ''
+  ).trim();
+
+  if (currentLink) {
+    throw new Error('Dòng này đã có FILE CỨNG.');
+  }
+
+  const soHopDong = String(
+    sheet.getRange(row, 1).getDisplayValue() || ''
+  ).trim();
+
+  if (!soHopDong) {
+    throw new Error('Dòng ' + row + ' chưa có Số hợp đồng ở cột A.');
+  }
+
+  const mainFolder = DriveApp.getFolderById(CONFIG.FOLDER_ID);
+  const targetFolder = layHoacTaoThuMucStt_(mainFolder, soHopDong);
+  const safeName = lamSachTenFile_(originalName);
+  const blob = Utilities.newBlob(bytes, mimeType, safeName);
+  const file = targetFolder.createFile(blob);
+
+  file.setSharing(
+    DriveApp.Access.ANYONE_WITH_LINK,
+    DriveApp.Permission.VIEW
+  );
+
+  const viewUrl =
+    'https://drive.google.com/file/d/' + file.getId() + '/view';
+
+  sheet.getRange(row, CONFIG.HARD_UPLOAD_COLUMN)
+    .setNote('Đã tải: ' + safeName);
+  sheet.getRange(row, CONFIG.HARD_LINK_COLUMN).setValue(viewUrl);
+  SpreadsheetApp.flush();
+
+  return {
+    fileName: safeName,
+    url: viewUrl,
+    row: row,
+    lanTai: '01'
+  };
+}
+
+function laySpreadsheet_() {
+  const activeSpreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+
+  if (activeSpreadsheet) return activeSpreadsheet;
+
+  const spreadsheetId = PropertiesService.getScriptProperties()
+    .getProperty('SPREADSHEET_ID');
+
+  if (!spreadsheetId) {
+    throw new Error(
+      'Chưa lưu Spreadsheet ID. Chủ sở hữu hãy chạy caiDatHeThong một lần.'
+    );
+  }
+
+  return SpreadsheetApp.openById(spreadsheetId);
+}
+
+function layEmailNguoiDung_() {
+  const email = String(
+    Session.getActiveUser().getEmail() || ''
+  ).trim().toLowerCase();
+
+  if (!email) {
+    throw new Error(
+      'Google không cung cấp email đăng nhập. ' +
+      'Hãy dùng tài khoản Google Workspace cùng công ty và cấp quyền cho script.'
+    );
+  }
+
+  return email;
+}
+
+function layEmailChuSoHuu_(spreadsheet) {
+  const owner = DriveApp.getFileById(spreadsheet.getId()).getOwner();
+  return owner
+    ? String(owner.getEmail() || '').trim().toLowerCase()
+    : '';
 }
 
 
@@ -597,10 +872,16 @@ function lamSachTenFile_(name) {
     .trim();
 }
 
+/** Khóa vùng link Word W:Y và FILE CỨNG AA:AB. */
 function khoaCotLink_(sheet, maxRows) {
+  const protectionDescriptions = [
+    CONFIG.LINK_PROTECTION_DESCRIPTION,
+    CONFIG.HARD_FILE_PROTECTION_DESCRIPTION
+  ];
+
   sheet.getProtections(SpreadsheetApp.ProtectionType.RANGE)
     .filter(protection =>
-      protection.getDescription() === CONFIG.LINK_PROTECTION_DESCRIPTION
+      protectionDescriptions.includes(protection.getDescription())
     )
     .forEach(protection => protection.remove());
 
@@ -613,25 +894,43 @@ function khoaCotLink_(sheet, maxRows) {
 
   linkRange.clearDataValidations();
 
-  const protection = linkRange
-    .protect()
-    .setDescription(CONFIG.LINK_PROTECTION_DESCRIPTION);
+  const protectedRanges = [
+    {
+      range: linkRange,
+      description: CONFIG.LINK_PROTECTION_DESCRIPTION
+    },
+    {
+      range: sheet.getRange(
+        2,
+        CONFIG.HARD_UPLOAD_COLUMN,
+        maxRows - 1,
+        2
+      ),
+      description: CONFIG.HARD_FILE_PROTECTION_DESCRIPTION
+    }
+  ];
   const effectiveUser = Session.getEffectiveUser();
   const effectiveEmail = effectiveUser.getEmail();
 
-  protection.addEditor(effectiveUser);
+  protectedRanges.forEach(item => {
+    const protection = item.range
+      .protect()
+      .setDescription(item.description);
 
-  const otherEditors = protection.getEditors().filter(editor =>
-    editor.getEmail() !== effectiveEmail
-  );
+    protection.addEditor(effectiveUser);
 
-  if (otherEditors.length > 0) {
-    protection.removeEditors(otherEditors);
-  }
+    const otherEditors = protection.getEditors().filter(editor =>
+      editor.getEmail() !== effectiveEmail
+    );
 
-  if (protection.canDomainEdit()) {
-    protection.setDomainEdit(false);
-  }
+    if (otherEditors.length > 0) {
+      protection.removeEditors(otherEditors);
+    }
+
+    if (protection.canDomainEdit()) {
+      protection.setDomainEdit(false);
+    }
+  });
 }
 
 

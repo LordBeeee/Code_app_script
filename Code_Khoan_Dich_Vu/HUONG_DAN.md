@@ -64,3 +64,22 @@ Khi tạo lại lần 2 hoặc lần 3 trên cùng một dòng, số hợp đồ
 Nếu code báo không tìm thấy thư mục, mở thư mục đích trên Drive, sao chép chuỗi nằm sau `/folders/` trong URL và thay giá trị `FOLDER_ID` ở đầu file `code.gs`.
 
 Lưu ý phân biệt chữ `I` hoa và chữ `l` thường trong ID. ID lấy từ ảnh hiện tại là `1FCIPy1gl88pMOlUn4ZtgPIPYflzzmNg`.
+
+## 4. Cột AA và AB – FILE CỨNG
+
+- AA: nút **⬆ TẢI FILE CỨNG**.
+- AB: link xem tệp đã tải.
+- AC: Trạng thái, code không thay đổi cột này.
+- Chấp nhận PDF, JPG hoặc PNG, tối đa 10 MB.
+- Mỗi dòng chỉ có một FILE CỨNG và chỉ chủ sở hữu bảng tính được tải.
+- Tệp được lưu chung thư mục với các bản hợp đồng của Số hợp đồng tại cột A.
+
+Để bật nút tải tệp:
+
+1. Trong Apps Script, tạo tệp HTML tên `UploadPDF` và dán nội dung file `UploadPDF.html` vào đó.
+2. Chọn **Triển khai → Lần triển khai mới → Ứng dụng web**.
+3. Chọn thực thi bằng tài khoản của bạn và giới hạn người truy cập theo chính sách công ty.
+4. Sao chép URL kết thúc bằng `/exec`, dán vào `CONFIG.WEB_APP_URL` trong `code.gs`. Code chấp nhận cả URL thường `/macros/s/.../exec` và URL Google Workspace `/a/macros/tên-miền/s/.../exec`.
+5. Lưu và chạy lại `caiDatHeThong` một lần.
+
+Phần upload này dùng lại cùng giao diện và quy tắc của Đề nghị thanh toán. Code hợp đồng tiếp tục dùng hàm `layHoacTaoThuMucStt_` hiện có để không tạo thêm cấu trúc thư mục khác.
