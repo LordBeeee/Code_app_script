@@ -5,6 +5,8 @@
  * B:R - Dữ liệu bắt buộc
  * S:U - Link Word lần 01, 02, 03
  * V   - Checkbox TẠO WORD
+ * W   - Tải FILE CỨNG
+ * X   - Link_FILE_Cung
  *
  * Tên hàm và cấu hình dùng tiền tố BBNT để không xung đột với các
  * script Hợp đồng khoán và Giấy đề nghị thanh toán trong cùng dự án.
@@ -22,11 +24,154 @@ const BBNT_CONFIG = {
   FOLDER_URL:
     'https://drive.google.com/drive/folders/1sP4YJ8EVSNlq2D22M_J5ST2LXDjZ9ZKv?hl=vi',
 
+  // Có thể để trống: code tự lấy URL Web App đã triển khai.
+  WEB_APP_URL: 'https://script.google.com/a/macros/getvini.com/s/AKfycbyctf_obGyoa50C4snPLJ_CuIeO-ysY9dpin1r5YEvmIXK9t6RZ7pe6D0OBTjNoVpcs/exec',
+
   FIRST_LINK_COLUMN: 19, // S
   LINK_COUNT: 3,         // S, T, U
   ACTION_COLUMN: 22,     // V
-  LINK_PROTECTION_DESCRIPTION: 'KHOA_LINK_BBNT_TU_DONG'
+  LINK_PROTECTION_DESCRIPTION: 'KHOA_LINK_BBNT_TU_DONG',
+  HARD_FILE_PROTECTION_DESCRIPTION: 'KHOA_FILE_CUNG_BBNT_TU_DONG',
+  HARD_UPLOAD_COLUMN: 23, // W
+  HARD_LINK_COLUMN: 24,   // X
+  UPLOAD_MAX_SIZE_MB: 10
 };
+
+
+// ========================================
+// 0. FILE CỨNG: CÙNG GIAO DIỆN VỚI ĐỀ NGHỊ THANH TOÁN
+// ========================================
+
+function bbntLayUrlWebApp_() {
+  const url = String(
+    BBNT_CONFIG.WEB_APP_URL || ScriptApp.getService().getUrl() || ''
+  ).trim();
+
+  return /^https:\/\/script\.google\.com\/(?:macros\/s|a\/macros\/[^/]+\/s)\/[^/?#]+\/exec(?:[?#].*)?$/
+    .test(url) ? url : '';
+}
+
+function bbntTaoNutUpload_(sheet, maxRows) {
+  const baseUrl = bbntLayUrlWebApp_();
+  if (!baseUrl || maxRows < 2) return;
+
+  const buttons = [];
+  for (let row = 2; row <= maxRows; row++) {
+    buttons.push([
+      SpreadsheetApp.newRichTextValue()
+        .setText('⬆ TẢI FILE CỨNG')
+        .setLinkUrl(baseUrl + '?loai=FILE_CUNG&row=' + row)
+        .build()
+    ]);
+  }
+
+  sheet.getRange(2, BBNT_CONFIG.HARD_UPLOAD_COLUMN, maxRows - 1, 1)
+    .setRichTextValues(buttons)
+    .setHorizontalAlignment('center')
+    .setFontWeight('bold')
+    .setFontColor('#1155CC')
+    .setBackground('#E8F0FE');
+}
+
+function doGet(e) {
+  const loai = String(e && e.parameter && e.parameter.loai || '');
+  const row = Number(e && e.parameter && e.parameter.row || 0);
+
+  if (loai !== 'FILE_CUNG' || !Number.isInteger(row) || row < 2) {
+    return HtmlService.createHtmlOutput('<h3>Đường link upload không hợp lệ.</h3>');
+  }
+
+  const ss = bbntLaySpreadsheet_();
+  const owner = DriveApp.getFileById(ss.getId()).getOwner();
+  const ownerEmail = owner ? String(owner.getEmail()).trim().toLowerCase() : '';
+  const activeEmail = String(Session.getActiveUser().getEmail() || '')
+    .trim().toLowerCase();
+
+  if (!activeEmail || activeEmail !== ownerEmail) {
+    return HtmlService.createHtmlOutput(
+      '<h3>Chỉ chủ sở hữu bảng tính được tải FILE CỨNG.</h3>'
+    );
+  }
+
+  const template = HtmlService.createTemplateFromFile('UploadPDF');
+  template.loai = loai;
+  template.row = row;
+  template.tieuDe = 'FILE CỨNG';
+  template.maxSizeMb = BBNT_CONFIG.UPLOAD_MAX_SIZE_MB;
+  template.webMode = true;
+
+  return template.evaluate()
+    .setTitle('Tải FILE CỨNG - Dòng ' + row);
+}
+
+/** Hàm được gọi từ UploadPDF.html. */
+function luuPdfTuMayTinh(payload) {
+  if (!payload || !payload.base64) {
+    throw new Error('Không nhận được dữ liệu tệp.');
+  }
+
+  const row = Number(payload.row);
+  const originalName = String(payload.fileName || '').trim();
+  const mimeType = String(payload.mimeType || '').toLowerCase();
+  const lowerName = originalName.toLowerCase();
+  const validTypes = ['application/pdf', 'image/jpeg', 'image/png'];
+  const validExtensions = ['.pdf', '.jpg', '.jpeg', '.png'];
+
+  if (payload.loai !== 'FILE_CUNG' || !Number.isInteger(row) || row < 2) {
+    throw new Error('Yêu cầu tải tệp không hợp lệ.');
+  }
+
+  if (!validTypes.includes(mimeType) ||
+      !validExtensions.some(extension => lowerName.endsWith(extension))) {
+    throw new Error('Chỉ được tải lên PDF, JPG hoặc PNG.');
+  }
+
+  const bytes = Utilities.base64Decode(payload.base64);
+  if (bytes.length > BBNT_CONFIG.UPLOAD_MAX_SIZE_MB * 1024 * 1024) {
+    throw new Error('Tệp vượt quá ' + BBNT_CONFIG.UPLOAD_MAX_SIZE_MB + ' MB.');
+  }
+
+  const ss = bbntLaySpreadsheet_();
+  const owner = DriveApp.getFileById(ss.getId()).getOwner();
+  const ownerEmail = owner ? String(owner.getEmail()).trim().toLowerCase() : '';
+  const activeEmail = String(Session.getActiveUser().getEmail() || '')
+    .trim().toLowerCase();
+
+  if (!activeEmail || activeEmail !== ownerEmail) {
+    throw new Error('Chỉ chủ sở hữu bảng tính được tải FILE CỨNG.');
+  }
+
+  const sheet = ss.getSheetByName(BBNT_CONFIG.SHEET_NAME);
+  if (!sheet || row > sheet.getMaxRows()) {
+    throw new Error('Không tìm thấy dòng biên bản nghiệm thu.');
+  }
+
+  const linkCell = sheet.getRange(row, BBNT_CONFIG.HARD_LINK_COLUMN);
+  if (String(linkCell.getDisplayValue() || '').trim()) {
+    throw new Error('Dòng này đã có FILE CỨNG.');
+  }
+
+  const soBienBan = String(sheet.getRange(row, 1).getDisplayValue() || '').trim();
+  if (!soBienBan) {
+    throw new Error('Dòng ' + row + ' chưa có Số Biên Bản Nghiệm Thu ở cột A.');
+  }
+
+  const folderId = bbntLayIdFolder_(BBNT_CONFIG.FOLDER_URL);
+  const mainFolder = DriveApp.getFolderById(folderId);
+  const targetFolder = bbntLayHoacTaoThuMuc_(mainFolder, soBienBan);
+  const safeName = bbntLamSachTenFile_(originalName);
+  const blob = Utilities.newBlob(bytes, mimeType, safeName);
+  const file = targetFolder.createFile(blob);
+  file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+
+  const viewUrl = 'https://drive.google.com/file/d/' + file.getId() + '/view';
+  linkCell.setValue(viewUrl);
+  sheet.getRange(row, BBNT_CONFIG.HARD_UPLOAD_COLUMN)
+    .setNote('Đã tải: ' + safeName);
+  SpreadsheetApp.flush();
+
+  return { fileName: safeName, url: viewUrl, row: row, lanTai: '01' };
+}
 
 
 // ========================================
@@ -66,13 +211,16 @@ function caiDatBienBanNghiemThu() {
   DriveApp.getFolderById(folderId).getName();
 
   bbntXoaHaiCotTrungLap_(sheet);
-  bbntChuanHoaCotLink_(sheet);
   sheet.getRange('A1').setValue('Số Biên Bản Nghiệm Thu');
   sheet.getRange('S1:V1').setValues([[
     'Link_Word_01',
     'Link_Word_02',
     'Link_Word_03',
     'TẠO WORD'
+  ]]);
+  sheet.getRange('W1:X1').setValues([[
+    'FILE CỨNG',
+    'Link_FILE_Cung'
   ]]);
 
   const maxRows = sheet.getMaxRows();
@@ -84,6 +232,7 @@ function caiDatBienBanNghiemThu() {
       .setBackground('#E8F5E9');
 
     bbntKhoaCotLink_(sheet, maxRows);
+    bbntTaoNutUpload_(sheet, maxRows);
   }
 
   sheet.setColumnWidths(
@@ -92,6 +241,7 @@ function caiDatBienBanNghiemThu() {
     180
   );
   sheet.setColumnWidth(BBNT_CONFIG.ACTION_COLUMN, 120);
+  sheet.setColumnWidths(BBNT_CONFIG.HARD_UPLOAD_COLUMN, 2, 180);
 
   ScriptApp.getProjectTriggers()
     .filter(trigger =>
@@ -106,7 +256,9 @@ function caiDatBienBanNghiemThu() {
 
   bbntThongBao_(
     ss,
-    'Đã tạo checkbox cột V và trigger tự động.',
+    bbntLayUrlWebApp_()
+      ? 'Đã tạo checkbox V và nút FILE CỨNG ở W.'
+      : 'Đã cài biên bản. Triển khai Web App rồi chạy cài đặt lại để hiện nút W.',
     'Cài đặt biên bản nghiệm thu thành công',
     7
   );
@@ -132,49 +284,6 @@ function bbntXoaHaiCotTrungLap_(sheet) {
 
   columns.forEach(column => sheet.deleteColumn(column));
 }
-
-/**
- * Dọn cấu trúc link bị trùng do code cũ từng tạo U:X sau khi J:K đã bị xóa.
- * Các URL tài liệu hiện có trong S:X được gom lại và giữ tối đa ba link ở S:U.
- */
-function bbntChuanHoaCotLink_(sheet) {
-  const maxRows = sheet.getMaxRows();
-  const firstColumn = 19; // S
-  const width = 6;        // S:X
-  const oldRange = sheet.getRange(1, firstColumn, maxRows, width);
-  const oldValues = oldRange.getDisplayValues();
-  const preservedLinks = [];
-
-  for (let rowIndex = 1; rowIndex < oldValues.length; rowIndex++) {
-    const links = [];
-
-    oldValues[rowIndex].forEach(value => {
-      const text = String(value || '').trim();
-
-      if (
-        /https:\/\/docs\.google\.com\/document\//i.test(text) &&
-        !links.includes(text)
-      ) {
-        links.push(text);
-      }
-    });
-
-    preservedLinks.push([
-      links[0] || '',
-      links[1] || '',
-      links[2] || ''
-    ]);
-  }
-
-  oldRange.clearContent().clearDataValidations().clearNote();
-  sheet.getRange(1, firstColumn, maxRows, width).setBackground(null);
-
-  if (preservedLinks.length > 0) {
-    sheet.getRange(2, firstColumn, preservedLinks.length, 3)
-      .setValues(preservedLinks);
-  }
-}
-
 
 // ========================================
 // 2. XỬ LÝ CHECKBOX CỘT V
@@ -614,10 +723,14 @@ function bbntLamSachTenFile_(name) {
 }
 
 function bbntKhoaCotLink_(sheet, maxRows) {
+  const protectionDescriptions = [
+    BBNT_CONFIG.LINK_PROTECTION_DESCRIPTION,
+    BBNT_CONFIG.HARD_FILE_PROTECTION_DESCRIPTION
+  ];
+
   sheet.getProtections(SpreadsheetApp.ProtectionType.RANGE)
     .filter(protection =>
-      protection.getDescription() ===
-      BBNT_CONFIG.LINK_PROTECTION_DESCRIPTION
+      protectionDescriptions.includes(protection.getDescription())
     )
     .forEach(protection => protection.remove());
 
@@ -630,25 +743,26 @@ function bbntKhoaCotLink_(sheet, maxRows) {
 
   linkRange.clearDataValidations();
 
-  const protection = linkRange
-    .protect()
-    .setDescription(BBNT_CONFIG.LINK_PROTECTION_DESCRIPTION);
   const effectiveUser = Session.getEffectiveUser();
   const effectiveEmail = effectiveUser.getEmail();
 
-  protection.addEditor(effectiveUser);
+  [
+    { range: linkRange, description: BBNT_CONFIG.LINK_PROTECTION_DESCRIPTION },
+    {
+      range: sheet.getRange(2, BBNT_CONFIG.HARD_UPLOAD_COLUMN, maxRows - 1, 2),
+      description: BBNT_CONFIG.HARD_FILE_PROTECTION_DESCRIPTION
+    }
+  ].forEach(item => {
+    const protection = item.range.protect().setDescription(item.description);
+    protection.addEditor(effectiveUser);
 
-  const otherEditors = protection.getEditors().filter(editor =>
-    editor.getEmail() !== effectiveEmail
-  );
+    const otherEditors = protection.getEditors().filter(editor =>
+      editor.getEmail() !== effectiveEmail
+    );
 
-  if (otherEditors.length > 0) {
-    protection.removeEditors(otherEditors);
-  }
-
-  if (protection.canDomainEdit()) {
-    protection.setDomainEdit(false);
-  }
+    if (otherEditors.length > 0) protection.removeEditors(otherEditors);
+    if (protection.canDomainEdit()) protection.setDomainEdit(false);
+  });
 }
 
 
