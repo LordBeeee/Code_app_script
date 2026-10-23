@@ -26,6 +26,8 @@ const CONFIG = {
   FIRST_LINK_COLUMN: 10, // J
   LINK_COUNT: 3,
   ACTION_COLUMN: 13,    // M
+  AMOUNT_COLUMN: 6,     // F
+  AMOUNT_WORDS_COLUMN: 7, // G
   LINK_PROTECTION_DESCRIPTION: 'KHOA_LINK_WORD_TU_DONG',
   BILL_LINK_PROTECTION_DESCRIPTION: 'KHOA_LINK_BILL_TU_DONG',
   HARD_FILE_PROTECTION_DESCRIPTION: 'KHOA_FILE_CUNG_TU_DONG',
@@ -740,8 +742,79 @@ function tachNgay(dateText) {
 
 
 // ========================================
-// 7. XỬ LÝ KHI TÍCH CHECKBOX Ở CỘT M
+// 7. TỰ ĐIỀN CỘT G VÀ XỬ LÝ CHECKBOX Ở CỘT M
 // ========================================
+
+/** Nhận số Sheets hoặc số tiền có dấu phân tách như 108.000 / 108,000. */
+function docSoTienThanhToan_(value) {
+  if (typeof value === 'number') {
+    return Number.isSafeInteger(value) && value > 0 ? value : null;
+  }
+
+  const input = String(value ?? '').trim().replace(/\u00a0/g, ' ');
+  if (!input) return null;
+
+  const valid = /^\d+$/.test(input) ||
+    /^\d{1,3}(?:\.\d{3})+$/.test(input) ||
+    /^\d{1,3}(?:,\d{3})+$/.test(input) ||
+    /^\d{1,3}(?: \d{3})+$/.test(input);
+  if (!valid) return null;
+
+  const amount = Number(input.replace(/[., ]/g, ''));
+  return Number.isSafeInteger(amount) && amount > 0 ? amount : null;
+}
+
+function vietBaChuSoThanhToan_(number, docDuBaChuSo) {
+  const digits = ['không', 'một', 'hai', 'ba', 'bốn', 'năm', 'sáu', 'bảy', 'tám', 'chín'];
+  const tram = Math.floor(number / 100);
+  const chuc = Math.floor(number / 10) % 10;
+  const donVi = number % 10;
+  const words = [];
+
+  if (tram || docDuBaChuSo) words.push(digits[tram], 'trăm');
+  if (chuc > 1) {
+    words.push(digits[chuc], 'mươi');
+    if (donVi) words.push(donVi === 1 ? 'mốt' : donVi === 5 ? 'lăm' : digits[donVi]);
+  } else if (chuc === 1) {
+    words.push('mười');
+    if (donVi) words.push(donVi === 5 ? 'lăm' : digits[donVi]);
+  } else if (donVi) {
+    if (tram || docDuBaChuSo) words.push('lẻ');
+    words.push(digits[donVi]);
+  }
+
+  return words.join(' ');
+}
+
+function vietSoTienThanhToanBangChu_(amount) {
+  const units = ['', 'nghìn', 'triệu', 'tỷ', 'nghìn tỷ'];
+  const groups = [];
+  let remaining = amount;
+
+  while (remaining > 0) {
+    groups.push(remaining % 1000);
+    remaining = Math.floor(remaining / 1000);
+  }
+  if (groups.length > units.length) {
+    throw new Error('Số tiền ở cột F quá lớn để chuyển thành chữ.');
+  }
+
+  const words = [];
+  for (let i = groups.length - 1; i >= 0; i--) {
+    if (!groups[i]) continue;
+    const groupWords = vietBaChuSoThanhToan_(groups[i], words.length > 0 && groups[i] < 100);
+    words.push(groupWords + (units[i] ? ' ' + units[i] : ''));
+  }
+
+  const result = words.join(' ') + ' đồng';
+  return result.charAt(0).toUpperCase() + result.slice(1);
+}
+
+function capNhatTienThanhToanBangChu_(sheet, row) {
+  const amount = docSoTienThanhToan_(sheet.getRange(row, CONFIG.AMOUNT_COLUMN).getValue());
+  sheet.getRange(row, CONFIG.AMOUNT_WORDS_COLUMN)
+    .setValue(amount === null ? '' : vietSoTienThanhToanBangChu_(amount));
+}
 
 function xuLyTaoWord(e) {
   if (!e || !e.range) return;
@@ -749,6 +822,16 @@ function xuLyTaoWord(e) {
   const sheet = e.range.getSheet();
 
   if (sheet.getName() !== CONFIG.SHEET_NAME) return;
+
+  // Hỗ trợ dán nhiều dòng hoặc nhiều cột có chứa F.
+  if (
+    e.range.getColumn() <= CONFIG.AMOUNT_COLUMN &&
+    e.range.getLastColumn() >= CONFIG.AMOUNT_COLUMN
+  ) {
+    for (let row = Math.max(2, e.range.getRow()); row <= e.range.getLastRow(); row++) {
+      capNhatTienThanhToanBangChu_(sheet, row);
+    }
+  }
 
   if (
     e.range.getColumn() !== CONFIG.ACTION_COLUMN ||
@@ -807,6 +890,15 @@ function xuLyTaoWord(e) {
 function taoTaiLieuChoDong(sheet, row) {
   // A:I là dữ liệu; J:L là ba link hiện có.
   const values = sheet.getRange(row, 1, 1, 12).getDisplayValues()[0];
+  const amount = docSoTienThanhToan_(
+    sheet.getRange(row, CONFIG.AMOUNT_COLUMN).getValue()
+  );
+  if (amount === null) {
+    throw new Error('Số tiền thanh toán ở cột F phải là số nguyên lớn hơn 0 (ví dụ: 108.000).');
+  }
+  const amountWords = vietSoTienThanhToanBangChu_(amount);
+  sheet.getRange(row, CONFIG.AMOUNT_WORDS_COLUMN).setValue(amountWords);
+  values[CONFIG.AMOUNT_WORDS_COLUMN - 1] = amountWords;
 
   const headers = [
     'STT',
@@ -863,16 +955,6 @@ function taoTaiLieuChoDong(sheet, row) {
   // Lần tạo 1, 2, 3 tương ứng 01, 02, 03.
   const lanTao = String(emptyLinkIndex + 1).padStart(2, '0');
   const targetLinkColumn = CONFIG.FIRST_LINK_COLUMN + emptyLinkIndex;
-
-  const amount = sheet.getRange(row, 6).getValue();
-
-  if (
-    typeof amount !== 'number' ||
-    !Number.isFinite(amount) ||
-    amount <= 0
-  ) {
-    throw new Error('Số tiền thanh toán phải lớn hơn 0.');
-  }
 
   const ngayDon = tachNgay(ngayLamDon);
   const ngayHan = tachNgay(thoiHan);
