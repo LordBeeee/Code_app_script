@@ -32,6 +32,8 @@ const CONFIG = {
   HARD_FILE_PROTECTION_DESCRIPTION: 'KHOA_FILE_CUNG_HOP_DONG_TU_DONG',
   HARD_UPLOAD_COLUMN: 29, // AC
   HARD_LINK_COLUMN: 30,   // AD
+  AMOUNT_COLUMN: 21,       // U
+  AMOUNT_WORDS_COLUMN: 22, // V
   UPLOAD_MAX_SIZE_MB: 10
 };
 
@@ -384,8 +386,80 @@ function layEmailChuSoHuu_(spreadsheet) {
 
 
 // ========================================
-// 2. XỬ LÝ CHECKBOX Ở CỘT AB
+// 2. TỰ ĐIỀN CỘT V VÀ XỬ LÝ CHECKBOX Ở CỘT AB
 // ========================================
+
+/** Nhận số Sheets hoặc số tiền nhập dạng 2,160,000 / 2.160.000. */
+function docSoTien_(value) {
+  if (typeof value === 'number') {
+    return Number.isSafeInteger(value) && value > 0 ? value : null;
+  }
+
+  const input = String(value ?? '').trim().replace(/\u00a0/g, ' ');
+  if (!input) return null;
+
+  const valid = /^\d+$/.test(input) ||
+    /^\d{1,3}(?:,\d{3})+$/.test(input) ||
+    /^\d{1,3}(?:\.\d{3})+$/.test(input) ||
+    /^\d{1,3}(?: \d{3})+$/.test(input);
+  if (!valid) return null;
+
+  const amount = Number(input.replace(/[., ]/g, ''));
+  return Number.isSafeInteger(amount) && amount > 0 ? amount : null;
+}
+
+function vietBaChuSo_(number, docDuBaChuSo) {
+  const digits = ['không', 'một', 'hai', 'ba', 'bốn', 'năm', 'sáu', 'bảy', 'tám', 'chín'];
+  const tram = Math.floor(number / 100);
+  const chuc = Math.floor(number / 10) % 10;
+  const donVi = number % 10;
+  const words = [];
+
+  if (tram || docDuBaChuSo) words.push(digits[tram], 'trăm');
+  if (chuc > 1) {
+    words.push(digits[chuc], 'mươi');
+    if (donVi) words.push(donVi === 1 ? 'mốt' : donVi === 5 ? 'lăm' : digits[donVi]);
+  } else if (chuc === 1) {
+    words.push('mười');
+    if (donVi) words.push(donVi === 5 ? 'lăm' : digits[donVi]);
+  } else if (donVi) {
+    if (tram || docDuBaChuSo) words.push('linh');
+    words.push(digits[donVi]);
+  }
+
+  return words.join(' ');
+}
+
+/** Viết số tiền đồng bằng chữ, giữ cách hiển thị của cột V hiện tại (không thêm "đồng"). */
+function vietSoTienBangChu_(amount) {
+  const units = ['', 'nghìn', 'triệu', 'tỷ', 'nghìn tỷ'];
+  const groups = [];
+  let remaining = amount;
+
+  while (remaining > 0) {
+    groups.push(remaining % 1000);
+    remaining = Math.floor(remaining / 1000);
+  }
+  if (groups.length > units.length) {
+    throw new Error('Số tiền ở cột U quá lớn để chuyển thành chữ.');
+  }
+
+  const words = [];
+  for (let i = groups.length - 1; i >= 0; i--) {
+    if (!groups[i]) continue;
+    const groupWords = vietBaChuSo_(groups[i], words.length > 0 && groups[i] < 100);
+    words.push(groupWords + (units[i] ? ' ' + units[i] : ''));
+  }
+
+  const result = words.join(' ');
+  return result.charAt(0).toUpperCase() + result.slice(1);
+}
+
+function capNhatThuLaoBangChu_(sheet, row) {
+  const amount = docSoTien_(sheet.getRange(row, CONFIG.AMOUNT_COLUMN).getValue());
+  sheet.getRange(row, CONFIG.AMOUNT_WORDS_COLUMN)
+    .setValue(amount === null ? '' : vietSoTienBangChu_(amount));
+}
 
 function xuLyTaoHopDong(e) {
   if (!e || !e.range) return;
@@ -393,8 +467,19 @@ function xuLyTaoHopDong(e) {
   const range = e.range;
   const sheet = range.getSheet();
 
+  if (sheet.getName() !== CONFIG.SHEET_NAME) return;
+
+  // Hỗ trợ cả khi dán nhiều dòng hoặc nhiều cột có chứa U.
   if (
-    sheet.getName() !== CONFIG.SHEET_NAME ||
+    range.getColumn() <= CONFIG.AMOUNT_COLUMN &&
+    range.getLastColumn() >= CONFIG.AMOUNT_COLUMN
+  ) {
+    for (let row = Math.max(2, range.getRow()); row <= range.getLastRow(); row++) {
+      capNhatThuLaoBangChu_(sheet, row);
+    }
+  }
+
+  if (
     range.getColumn() !== CONFIG.ACTION_COLUMN ||
     range.getRow() < 2 ||
     range.getNumRows() !== 1 ||
@@ -536,6 +621,14 @@ function taoHopDongChoDong_(sheet, row) {
   ];
   const missing = [];
 
+  const amount = docSoTien_(rawValues[CONFIG.AMOUNT_COLUMN - 1]);
+  if (amount === null) {
+    throw new Error('Tổng giá trị thù lao ở cột U phải là số nguyên lớn hơn 0 (ví dụ: 2,160,000).');
+  }
+  const amountWords = vietSoTienBangChu_(amount);
+  sheet.getRange(row, CONFIG.AMOUNT_WORDS_COLUMN).setValue(amountWords);
+  displayValues[CONFIG.AMOUNT_WORDS_COLUMN - 1] = amountWords;
+
   // Cột A do code tự sinh; bắt buộc người dùng nhập đầy đủ B:X.
   for (let i = 1; i < headers.length; i++) {
     const value = String(displayValues[i] ?? '').trim();
@@ -560,12 +653,6 @@ function taoHopDongChoDong_(sheet, row) {
 
   if (emptyLinkIndex === -1) {
     throw new Error('Dòng này đã tạo đủ 3 hợp đồng.');
-  }
-
-  const amount = rawValues[20]; // Cột U
-
-  if (typeof amount !== 'number' || !Number.isFinite(amount) || amount <= 0) {
-    throw new Error('Tổng giá trị thù lao ở cột U phải là số lớn hơn 0.');
   }
 
   // Kiểm tra ngày hoàn thành trước khi cấp số hợp đồng.

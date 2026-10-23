@@ -51,6 +51,8 @@ Giữ nguyên định dạng chữ của phần bôi vàng khi thay bằng biế
 
 Sau khi cài đặt, cột W/X vẫn là dữ liệu ngân hàng, cột Y/Z/AA chứa ba link hợp đồng và cột AB có checkbox **TẠO WORD**. Cột W nên được định dạng **Văn bản thuần túy** trước khi nhập số tài khoản để giữ số 0 ở đầu.
 
+Cột U nhận số tiền nguyên dương, kể cả dạng văn bản có dấu phân tách hàng nghìn như `2,160,000` hoặc `2.160.000`. Khi sửa U, cột V tự hiện số tiền bằng chữ, ví dụ `Hai triệu một trăm sáu mươi nghìn`. Nếu xóa U hoặc nhập số không hợp lệ, V được xóa. Lúc tạo hợp đồng, code cũng tính lại V từ U để tránh dùng chữ cũ. Nếu đã cài trigger bằng `caiDatHeThong` trước đó, chỉ cần cập nhật `code.gs` trong Apps Script; trigger hiện có sẽ dùng mã mới.
+
 ## 3. Sử dụng
 
 Điền đầy đủ dữ liệu từ cột B đến X, gồm Tên Brand tại cột H, Số tài khoản tại W và Mở tại tại X, rồi tích checkbox tại cột AB. Thiếu bất kỳ trường nào thì script không cấp số hợp đồng và không tạo tài liệu. Cột A do Apps Script tự sinh theo mẫu `DDMMYY-NN/BRAND`; không đặt công thức tại cột A.
