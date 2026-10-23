@@ -28,6 +28,8 @@ Trong tài liệu mẫu, thay nội dung bôi vàng bằng các biến sau:
 | Ngày hoàn thành | `{{NGAY_HOAN_THANH}}` |
 | Tổng thù lao | `{{TONG_THU_LAO}}` |
 | Tổng thù lao bằng chữ | `{{TONG_THU_LAO_BANG_CHU}}` |
+| Số tài khoản (cột W) | `{{SO_TAI_KHOAN}}` |
+| Mở tại (cột X) | `{{MO_TAI}}` |
 
 Nếu ngày trong mẫu được viết tách riêng, có thể dùng:
 
@@ -35,6 +37,8 @@ Nếu ngày trong mẫu được viết tách riêng, có thể dùng:
 - Ngày hoàn thành: `{{NGAY_HT}}`, `{{THANG_HT}}`, `{{NAM_HT}}`
 
 Giữ nguyên định dạng chữ của phần bôi vàng khi thay bằng biến. Không chèn kiểu chữ khác nhau vào giữa một biến.
+
+Ở mẫu hiện tại, nếu hai dòng **Số tài khoản:** và **Mở tại:** chưa có biến, code sẽ thêm biến vào bản sao hợp đồng rồi điền dữ liệu. Có thể tự đặt hai biến trên ngay sau dấu hai chấm trong mẫu; code sẽ không thêm lặp lại.
 
 ## 2. Cài code
 
@@ -45,11 +49,11 @@ Giữ nguyên định dạng chữ của phần bôi vàng khi thay bằng biế
 5. Chấp nhận quyền truy cập Google Sheets, Docs và Drive.
 6. Tải lại Google Sheet.
 
-Sau khi cài đặt, cột W/X/Y chứa ba link hợp đồng và cột Z có checkbox **TẠO WORD**.
+Sau khi cài đặt, cột W/X vẫn là dữ liệu ngân hàng, cột Y/Z/AA chứa ba link hợp đồng và cột AB có checkbox **TẠO WORD**. Cột W nên được định dạng **Văn bản thuần túy** trước khi nhập số tài khoản để giữ số 0 ở đầu.
 
 ## 3. Sử dụng
 
-Điền đầy đủ dữ liệu từ cột B đến V, gồm Tên Brand tại cột H, rồi tích checkbox tại cột Z. Thiếu bất kỳ trường nào thì script không cấp số hợp đồng và không tạo tài liệu. Cột A do Apps Script tự sinh theo mẫu `DDMMYY-NN/BRAND`; không đặt công thức tại cột A.
+Điền đầy đủ dữ liệu từ cột B đến X, gồm Tên Brand tại cột H, Số tài khoản tại W và Mở tại tại X, rồi tích checkbox tại cột AB. Thiếu bất kỳ trường nào thì script không cấp số hợp đồng và không tạo tài liệu. Cột A do Apps Script tự sinh theo mẫu `DDMMYY-NN/BRAND`; không đặt công thức tại cột A.
 
 Ví dụ ngày làm đơn `14/07/2026`, Brand `LASHE`:
 
@@ -57,19 +61,19 @@ Ví dụ ngày làm đơn `14/07/2026`, Brand `LASHE`:
 - Hợp đồng tiếp theo cùng ngày và Brand: `140726-02/LASHE`
 - Brand khác trong cùng ngày sẽ bắt đầu lại từ `01`.
 
-Bộ đếm chỉ xét những dòng đã có ít nhất một link Word tại W:Y. Dòng có số ở cột A nhưng chưa có link không được tính. Nếu tạo lại cùng một dòng đã có link, số hợp đồng được giữ nguyên.
+Bộ đếm chỉ xét những dòng đã có ít nhất một link Word tại Y:AA. Dòng có số ở cột A nhưng chưa có link không được tính. Nếu tạo lại cùng một dòng đã có link, số hợp đồng được giữ nguyên.
 
-Khi tạo lại lần 2 hoặc lần 3 trên cùng một dòng, số hợp đồng ở cột A được giữ nguyên. Link được ghi lần lượt vào cột W, X và Y.
+Khi tạo lại lần 2 hoặc lần 3 trên cùng một dòng, số hợp đồng ở cột A được giữ nguyên. Link được ghi lần lượt vào cột Y, Z và AA.
 
 Nếu code báo không tìm thấy thư mục, mở thư mục đích trên Drive, sao chép chuỗi nằm sau `/folders/` trong URL và thay giá trị `FOLDER_ID` ở đầu file `code.gs`.
 
 Lưu ý phân biệt chữ `I` hoa và chữ `l` thường trong ID. ID lấy từ ảnh hiện tại là `1FCIPy1gl88pMOlUn4ZtgPIPYflzzmNg`.
 
-## 4. Cột AA và AB – FILE CỨNG
+## 4. Cột AC và AD – FILE CỨNG
 
-- AA: nút **⬆ TẢI FILE CỨNG**.
-- AB: link xem tệp đã tải.
-- AC: Trạng thái, code không thay đổi cột này.
+- AC: nút **⬆ TẢI FILE CỨNG**.
+- AD: link xem tệp đã tải.
+- AE: Trạng thái, code không thay đổi cột này.
 - Chấp nhận PDF, JPG hoặc PNG, tối đa 10 MB.
 - Mỗi dòng chỉ có một FILE CỨNG và chỉ chủ sở hữu bảng tính được tải.
 - Tệp được lưu chung thư mục với các bản hợp đồng của Số hợp đồng tại cột A.
@@ -80,6 +84,6 @@ Lưu ý phân biệt chữ `I` hoa và chữ `l` thường trong ID. ID lấy t�
 2. Chọn **Triển khai → Lần triển khai mới → Ứng dụng web**.
 3. Chọn thực thi bằng tài khoản của bạn và giới hạn người truy cập theo chính sách công ty.
 4. Sao chép URL kết thúc bằng `/exec`, dán vào `CONFIG.WEB_APP_URL` trong `code.gs`. Code chấp nhận cả URL thường `/macros/s/.../exec` và URL Google Workspace `/a/macros/tên-miền/s/.../exec`.
-5. Lưu và chạy lại `caiDatHeThong` một lần.
+5. Lưu và chạy lại `caiDatHeThong` một lần. Việc này viết nhãn từ cột Y trở đi, không ghi đè dữ liệu ngân hàng ở W/X.
 
 Phần upload này dùng lại cùng giao diện và quy tắc của Đề nghị thanh toán. Code hợp đồng tiếp tục dùng hàm `layHoacTaoThuMucStt_` hiện có để không tạo thêm cấu trúc thư mục khác.

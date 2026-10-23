@@ -162,6 +162,7 @@
     <script>
       const loai = <?!= JSON.stringify(loai) ?>;
       const row = <?!= JSON.stringify(row) ?>;
+      const token = <?!= JSON.stringify(token) ?>;
       const maxSizeMb = <?!= JSON.stringify(maxSizeMb) ?>;
       const webMode = <?!= JSON.stringify(webMode) ?>;
       const allowedMimeTypes = [
@@ -386,7 +387,8 @@
 
               setStatus(
                 'Đã tải thành công' + suffix + ': ' + result.fileName +
-                  (webMode ? '. Bạn có thể đóng tab này.' : ''),
+                  (result.viewOnly ? '. Link chỉ có quyền xem.' : '') +
+                  (webMode ? ' Bạn có thể đóng tab này.' : ''),
                 'success'
               );
 
@@ -403,6 +405,7 @@
             .luuPdfTuMayTinh({
               loai: loai,
               row: row,
+              token: token,
               fileName: file.name,
               mimeType: getMimeType(file),
               base64: base64

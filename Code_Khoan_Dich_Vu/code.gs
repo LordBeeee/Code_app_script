@@ -1,12 +1,12 @@
 /**
  * TỰ ĐỘNG TẠO HỢP ĐỒNG KHOÁN DỊCH VỤ
  *
- * A:V - Dữ liệu hợp đồng (H là Tên Brand)
- * W:Y - Link Word lần 01, 02, 03
- * Z   - Checkbox tạo Word
- * AA  - Tải PDF/JPG/PNG FILE CỨNG
- * AB  - Link FILE CỨNG
- * AC  - Trạng thái nghiệp vụ (không do code này xử lý)
+ * A:X - Dữ liệu hợp đồng (H là Tên Brand, W là Số Tài khoản, X là Mở Tại)
+ * Y:AA - Link Word lần 01, 02, 03
+ * AB   - Checkbox tạo Word
+ * AC   - Tải PDF/JPG/PNG FILE CỨNG
+ * AD   - Link FILE CỨNG
+ * AE   - Trạng thái nghiệp vụ (không do code này xử lý)
  *
  * Trước khi sử dụng, thay các phần bôi vàng trong Google Docs mẫu bằng
  * các biến {{...}} được liệt kê trong TEMPLATE_FIELDS ở cuối file.
@@ -25,13 +25,13 @@ const CONFIG = {
   // Sau khi triển khai Web App, dán URL kết thúc bằng /exec vào đây.
   WEB_APP_URL: 'https://script.google.com/a/macros/getvini.com/s/AKfycby5CqdBQn8biRP4iWmNywuF3lxUIwQDSvgWF7uvMx6BMoiUOGCquB2371RjpsV8lTqb/exec',
 
-  FIRST_LINK_COLUMN: 23, // W
-  LINK_COUNT: 3,         // W, X, Y
-  ACTION_COLUMN: 26,     // Z
+  FIRST_LINK_COLUMN: 25, // Y
+  LINK_COUNT: 3,         // Y, Z, AA
+  ACTION_COLUMN: 28,     // AB
   LINK_PROTECTION_DESCRIPTION: 'KHOA_LINK_HOP_DONG_TU_DONG',
   HARD_FILE_PROTECTION_DESCRIPTION: 'KHOA_FILE_CUNG_HOP_DONG_TU_DONG',
-  HARD_UPLOAD_COLUMN: 27, // AA
-  HARD_LINK_COLUMN: 28,   // AB
+  HARD_UPLOAD_COLUMN: 29, // AC
+  HARD_LINK_COLUMN: 30,   // AD
   UPLOAD_MAX_SIZE_MB: 10
 };
 
@@ -90,7 +90,7 @@ function onOpen() {
 
 /**
  * Chạy hàm này đúng một lần sau khi dán code.
- * Hàm tạo W:Z, FILE CỨNG tại AA:AB và installable onEdit trigger.
+ * Hàm tạo Y:AB, FILE CỨNG tại AC:AD và installable onEdit trigger.
  */
 function caiDatHeThong() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -118,13 +118,13 @@ function caiDatHeThong() {
 
   xoaCongThucSttCu_(sheet);
 
-  sheet.getRange('W1:Z1').setValues([[
+  sheet.getRange('Y1:AB1').setValues([[
     'Link_Word_01',
     'Link_Word_02',
     'Link_Word_03',
     'TẠO WORD'
   ]]);
-  sheet.getRange('AA1:AB1').setValues([[
+  sheet.getRange('AC1:AD1').setValues([[
     'FILE CỨNG',
     'Link_FILE_Cung'
   ]]);
@@ -163,8 +163,8 @@ function caiDatHeThong() {
 
   ss.toast(
     coLinkWebAppHopLe_()
-      ? 'Đã tạo checkbox Z và nút tải FILE CỨNG tại AA.'
-      : 'Đã cài hợp đồng. Hãy triển khai Web App và điền WEB_APP_URL để tạo nút AA.',
+      ? 'Đã tạo checkbox AB và nút tải FILE CỨNG tại AC.'
+      : 'Đã cài hợp đồng. Hãy triển khai Web App và điền WEB_APP_URL để tạo nút AC.',
     'Cài đặt thành công',
     8
   );
@@ -384,7 +384,7 @@ function layEmailChuSoHuu_(spreadsheet) {
 
 
 // ========================================
-// 2. XỬ LÝ CHECKBOX Ở CỘT Y
+// 2. XỬ LÝ CHECKBOX Ở CỘT AB
 // ========================================
 
 function xuLyTaoHopDong(e) {
@@ -484,10 +484,10 @@ function taoHopDongDongDangChon() {
 function taoHopDongChoDong_(sheet, row) {
   xoaCongThucSttCu_(sheet);
 
-  // A:V là dữ liệu, W:Y là ba link đã tạo.
-  const displayValues = sheet.getRange(row, 1, 1, 25)
+  // A:X là dữ liệu, Y:AA là ba link đã tạo.
+  const displayValues = sheet.getRange(row, 1, 1, CONFIG.FIRST_LINK_COLUMN + CONFIG.LINK_COUNT - 1)
     .getDisplayValues()[0];
-  const rawValues = sheet.getRange(row, 1, 1, 22).getValues()[0];
+  const rawValues = sheet.getRange(row, 1, 1, CONFIG.FIRST_LINK_COLUMN - 1).getValues()[0];
 
   const ngayLamDonHienThi = String(displayValues[2] || '').trim();
   const tenBrandHienThi = String(displayValues[7] || '').trim();
@@ -525,7 +525,9 @@ function taoHopDongChoDong_(sheet, row) {
     'Số lượng Diễn viên',
     'Ngày hoàn thành công việc',
     'Tổng giá trị thù lao giao khoán',
-    'Tổng giá trị thù lao giao khoán (Bằng chữ)'
+    'Tổng giá trị thù lao giao khoán (Bằng chữ)',
+    'Số Tài khoản',
+    'Mở Tại'
   ];
 
   const errorValues = [
@@ -534,7 +536,7 @@ function taoHopDongChoDong_(sheet, row) {
   ];
   const missing = [];
 
-  // Cột A do code tự sinh; bắt buộc người dùng nhập đầy đủ B:V.
+  // Cột A do code tự sinh; bắt buộc người dùng nhập đầy đủ B:X.
   for (let i = 1; i < headers.length; i++) {
     const value = String(displayValues[i] ?? '').trim();
 
@@ -549,7 +551,10 @@ function taoHopDongChoDong_(sheet, row) {
     );
   }
 
-  const links = displayValues.slice(22, 25);
+  const links = displayValues.slice(
+    CONFIG.FIRST_LINK_COLUMN - 1,
+    CONFIG.FIRST_LINK_COLUMN - 1 + CONFIG.LINK_COUNT
+  );
   const emptyLinkIndex = links.findIndex(link => String(link).trim() === '');
   const currentRowHasLink = links.some(link => String(link).trim() !== '');
 
@@ -600,7 +605,9 @@ function taoHopDongChoDong_(sheet, row) {
     soLuongDienVien,
     ngayHoanThanh,
     tongThuLao,
-    tongThuLaoBangChu
+    tongThuLaoBangChu,
+    soTaiKhoan,
+    moTai
   ] = displayValues;
 
   const lanTao = String(emptyLinkIndex + 1).padStart(2, '0');
@@ -617,6 +624,7 @@ function taoHopDongChoDong_(sheet, row) {
 
   try {
     const doc = DocumentApp.openById(copy.getId());
+    dienBienNganHangVaoMau_(doc);
     const replacements = {
       '{{SO_HD}}': stt,
       '{{STT}}': stt,
@@ -646,7 +654,9 @@ function taoHopDongChoDong_(sheet, row) {
       '{{THANG_HT}}': ngayHoanTat.thang,
       '{{NAM_HT}}': ngayHoanTat.nam,
       '{{TONG_THU_LAO}}': tongThuLao,
-      '{{TONG_THU_LAO_BANG_CHU}}': tongThuLaoBangChu
+      '{{TONG_THU_LAO_BANG_CHU}}': tongThuLaoBangChu,
+      '{{SO_TAI_KHOAN}}': soTaiKhoan,
+      '{{MO_TAI}}': moTai
     };
 
     thayBienTrongTaiLieu_(doc, replacements);
@@ -695,7 +705,7 @@ function taoHopDongChoDong_(sheet, row) {
  * 140726-01/LASHE
  *
  * Bộ đếm tăng riêng cho từng cặp Ngày làm đơn + Brand.
- * Chỉ các dòng có ít nhất một link Word tại W:Y mới được tính.
+ * Chỉ các dòng có ít nhất một link Word tại Y:AA mới được tính.
  */
 function taoSoHopDongMoi_(sheet, currentRow, ngayKy, brandCode) {
   const dateCode = ngayKy.ngay + ngayKy.thang + ngayKy.nam.slice(-2);
@@ -706,7 +716,9 @@ function taoSoHopDongMoi_(sheet, currentRow, ngayKy, brandCode) {
     '(?:\\/\\d{4}\\/HĐKV-GETVINI)?$'
   );
   const lastRow = Math.max(sheet.getLastRow(), 2);
-  const existingRows = sheet.getRange(2, 1, lastRow - 1, 25)
+  const existingRows = sheet.getRange(
+    2, 1, lastRow - 1, CONFIG.FIRST_LINK_COLUMN + CONFIG.LINK_COUNT - 1
+  )
     .getDisplayValues();
   let maxSequence = 0;
 
@@ -774,6 +786,25 @@ function xoaCongThucSttCu_(sheet) {
 // ========================================
 // 5. HÀM HỖ TRỢ GOOGLE DOCS
 // ========================================
+
+// Mẫu hiện có hai nhãn ngân hàng nhưng chưa đặt biến. Chỉ thêm biến trên
+// bản sao để không phải sửa quyền hoặc bố cục của Google Docs mẫu.
+function dienBienNganHangVaoMau_(doc) {
+  const body = doc.getBody();
+  const text = body.getText();
+  const fields = [
+    { label: 'Số tài khoản:', token: '{{SO_TAI_KHOAN}}' },
+    { label: 'Mở tại:', token: '{{MO_TAI}}' }
+  ];
+
+  fields.forEach(field => {
+    if (text.includes(field.token)) return;
+    if (!text.includes(field.label)) {
+      throw new Error('Mẫu hợp đồng thiếu vị trí "' + field.label + '".');
+    }
+    body.replaceText(field.label, field.label + ' ' + field.token);
+  });
+}
 
 function thayBienTrongTaiLieu_(doc, replacements) {
   const containers = [doc.getBody()];
@@ -872,7 +903,7 @@ function lamSachTenFile_(name) {
     .trim();
 }
 
-/** Khóa vùng link Word W:Y và FILE CỨNG AA:AB. */
+/** Khóa vùng link Word Y:AA và FILE CỨNG AC:AD. */
 function khoaCotLink_(sheet, maxRows) {
   const protectionDescriptions = [
     CONFIG.LINK_PROTECTION_DESCRIPTION,
@@ -961,5 +992,7 @@ const TEMPLATE_FIELDS = [
   '{{SO_LUONG_DIEN_VIEN}}',
   '{{NGAY_HOAN_THANH}}',
   '{{TONG_THU_LAO}}',
-  '{{TONG_THU_LAO_BANG_CHU}}'
+  '{{TONG_THU_LAO_BANG_CHU}}',
+  '{{SO_TAI_KHOAN}}',
+  '{{MO_TAI}}'
 ];

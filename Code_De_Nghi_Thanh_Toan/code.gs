@@ -9,7 +9,8 @@
  * R   - Tải PDF FILE CỨNG
  * S   - Link PDF FILE CỨNG
  * T   - Trạng thái nghiệp vụ (không do code này xử lý)
- * U   - Email người tải Bill đầu tiên (cột ẩn)
+ * V   - Ngày Chi tiền (dữ liệu nghiệp vụ, không do code này xử lý)
+ * AB  - ID thư mục con dành cho Bill của dòng (cột ẩn)
  */
 
 const CONFIG = {
@@ -26,14 +27,17 @@ const CONFIG = {
   LINK_COUNT: 3,
   ACTION_COLUMN: 13,    // M
   LINK_PROTECTION_DESCRIPTION: 'KHOA_LINK_WORD_TU_DONG',
+  BILL_LINK_PROTECTION_DESCRIPTION: 'KHOA_LINK_BILL_TU_DONG',
   HARD_FILE_PROTECTION_DESCRIPTION: 'KHOA_FILE_CUNG_TU_DONG',
+  BILL_CONFIG_PROTECTION_DESCRIPTION: 'KHOA_CAU_HINH_BILL_TU_DONG',
 
   BILL_UPLOAD_COLUMN: 14,          // N
   BILL_FIRST_LINK_COLUMN: 15,      // O
   BILL_LINK_COUNT: 3,              // O, P, Q
   HARD_UPLOAD_COLUMN: 18,          // R
   HARD_LINK_COLUMN: 19,            // S
-  BILL_UPLOADER_EMAIL_COLUMN: 21,  // U - cột ẩn
+  BILL_FOLDER_ID_COLUMN: 28,        // AB - cột ẩn
+  BILL_FOLDER_NAME: 'MINH_CHUNG_BILL',
   UPLOAD_MAX_SIZE_MB: 10
 };
 
@@ -52,16 +56,26 @@ function doGet(e) {
     );
   }
 
+  const token = String(e && e.parameter && e.parameter.token || '');
+  if (loai === 'BILL' && !xacThucTokenBill_(row, token)) {
+    return HtmlService.createHtmlOutput(
+      '<h3>Link tải Bill không hợp lệ hoặc đã cũ.</h3>' +
+      '<p>Hãy mở lại nút TẢI BILL trong Google Sheet.</p>'
+    );
+  }
+
   // FILE CỨNG chỉ chủ sở hữu bảng tính được mở trang tải lên.
   if (loai === 'FILE_CUNG') {
     const ss = laySpreadsheet_();
-    const activeEmail = layEmailNguoiDung_();
+    const activeEmail = String(Session.getActiveUser().getEmail() || '')
+      .trim().toLowerCase();
     const ownerEmail = layEmailChuSoHuu_(ss);
 
     if (activeEmail !== ownerEmail) {
       return HtmlService.createHtmlOutput(
         '<h3>Bạn không có quyền tải FILE CỨNG.</h3>' +
-        '<p>Chỉ chủ sở hữu bảng tính được thực hiện thao tác này.</p>'
+        '<p>Chủ sở hữu hãy chọn dòng trong Google Sheet rồi dùng menu ' +
+        'Tải minh chứng → Tải FILE CỨNG.</p>'
       );
     }
   }
@@ -74,6 +88,7 @@ function doGet(e) {
     : 'FILE CỨNG';
   template.maxSizeMb = CONFIG.UPLOAD_MAX_SIZE_MB;
   template.webMode = true;
+  template.token = token;
 
   return template.evaluate()
     .setTitle('Tải tệp - ' + template.tieuDe + ' - Dòng ' + row);
@@ -121,10 +136,20 @@ function caiDatHeThong() {
   DocumentApp.openById(templateId).getBody();
   DriveApp.getFolderById(CONFIG.FOLDER_ID).getName();
 
-  PropertiesService.getScriptProperties().setProperty(
-    'SPREADSHEET_ID',
-    ss.getId()
-  );
+  const scriptProperties = PropertiesService.getScriptProperties();
+  scriptProperties.setProperty('SPREADSHEET_ID', ss.getId());
+  const executorEmail = String(Session.getEffectiveUser().getEmail() || '')
+    .trim().toLowerCase();
+  if (!executorEmail) {
+    throw new Error('Không đọc được email tài khoản chạy cài đặt. Hãy đăng nhập lại tài khoản chủ và chạy lại.');
+  }
+  scriptProperties.setProperty('BILL_EXECUTOR_EMAIL', executorEmail);
+  if (!scriptProperties.getProperty('BILL_LINK_SECRET')) {
+    scriptProperties.setProperty(
+      'BILL_LINK_SECRET',
+      Utilities.getUuid() + Utilities.getUuid()
+    );
+  }
 
   // J, K, L là ba lần tạo; M là nút tạo.
   sheet.getRange('J1:L1').setValues([[
@@ -143,8 +168,25 @@ function caiDatHeThong() {
     'FILE CỨNG',
     'Link_FILE_Cung'
   ]]);
-  sheet.getRange('U1').setValue('Email_Upload_Bill');
-  sheet.hideColumns(CONFIG.BILL_UPLOADER_EMAIL_COLUMN);
+  if (sheet.getMaxColumns() < CONFIG.BILL_FOLDER_ID_COLUMN) {
+    sheet.insertColumnsAfter(
+      sheet.getMaxColumns(),
+      CONFIG.BILL_FOLDER_ID_COLUMN - sheet.getMaxColumns()
+    );
+  }
+  const folderIdRange = sheet.getRange(
+    1, CONFIG.BILL_FOLDER_ID_COLUMN, sheet.getMaxRows(), 1
+  );
+  const folderIdValues = folderIdRange.getDisplayValues();
+  const folderIdHeader = String(folderIdValues[0][0] || '').trim();
+  if (folderIdHeader && folderIdHeader !== 'Bill_Folder_ID') {
+    throw new Error('Cột AB đang có dữ liệu khác. Hãy chọn cột trống khác để lưu ID thư mục Bill.');
+  }
+  if (!folderIdHeader && folderIdValues.slice(1).some(row => String(row[0] || '').trim())) {
+    throw new Error('Cột AB đã có dữ liệu. Không thể dùng cột này để lưu ID thư mục Bill.');
+  }
+  sheet.getRange(1, CONFIG.BILL_FOLDER_ID_COLUMN).setValue('Bill_Folder_ID');
+  sheet.hideColumns(CONFIG.BILL_FOLDER_ID_COLUMN);
 
   const maxRows = sheet.getMaxRows();
 
@@ -188,6 +230,25 @@ function caiDatHeThong() {
   );
 }
 
+// Token theo dòng ngăn người ngoài tự đổi tham số row khi Web App chạy bằng
+// tài khoản triển khai. Link trong Sheet là quyền tải Bill của dòng đó.
+function taoTokenBill_(row) {
+  const secret = PropertiesService.getScriptProperties()
+    .getProperty('BILL_LINK_SECRET');
+  if (!secret) {
+    throw new Error('Chưa tạo token tải Bill. Hãy chạy caiDatHeThong một lần.');
+  }
+  const signature = Utilities.computeHmacSha256Signature(
+    CONFIG.SHEET_NAME + ':' + row,
+    secret
+  );
+  return Utilities.base64EncodeWebSafe(signature);
+}
+
+function xacThucTokenBill_(row, token) {
+  return Boolean(token) && token === taoTokenBill_(row);
+}
+
 function coLinkWebAppHopLe_() {
   return /^https:\/\/script\.google\.com\/macros\/s\/.+\/exec$/
     .test(String(CONFIG.WEB_APP_URL || '').trim());
@@ -201,7 +262,8 @@ function taoNutUploadPdf_(sheet, maxRows) {
   const baseUrl = String(CONFIG.WEB_APP_URL).trim();
 
   for (let row = 2; row <= maxRows; row++) {
-    const billUrl = baseUrl + '?loai=BILL&row=' + row;
+    const billUrl = baseUrl + '?loai=BILL&row=' + row +
+      '&token=' + encodeURIComponent(taoTokenBill_(row));
     const hardFileUrl = baseUrl + '?loai=FILE_CUNG&row=' + row;
 
     billButtons.push([
@@ -249,7 +311,7 @@ function taoNutUploadPdf_(sheet, maxRows) {
 // 3. CỬA SỔ TẢI PDF / JPG / PNG TỪ MÁY TÍNH HOẶC ĐIỆN THOẠI
 // N và O:Q: Minh Chứng Bill, tối đa ba lần
 // R và S: FILE CỨNG, một lần
-// Word và PDF của cùng một dòng được lưu chung trong thư mục STT.
+// Bill được tải trực tiếp vào thư mục con có ID ở cột AB.
 // ========================================
 
 function moTaiMinhChungBill() {
@@ -294,6 +356,7 @@ function moHopThoaiTaiPdf_(loai) {
     : 'FILE CỨNG';
   template.maxSizeMb = CONFIG.UPLOAD_MAX_SIZE_MB;
   template.webMode = false;
+  template.token = loai === 'BILL' ? taoTokenBill_(row) : '';
 
   const html = template.evaluate()
     .setWidth(440)
@@ -306,6 +369,18 @@ function moHopThoaiTaiPdf_(loai) {
 }
 
 function luuPdfTuMayTinh(payload) {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) {
+    throw new Error('Hệ thống đang tải tệp khác. Hãy thử lại sau ít phút.');
+  }
+  try {
+    return luuPdfTuMayTinhCoKhoa_(payload);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function luuPdfTuMayTinhCoKhoa_(payload) {
   if (!payload || !payload.base64) {
     throw new Error('Không nhận được dữ liệu tệp.');
   }
@@ -314,156 +389,133 @@ function luuPdfTuMayTinh(payload) {
   const loai = String(payload.loai || '');
   const originalName = String(payload.fileName || '').trim();
   const mimeType = String(payload.mimeType || '').toLowerCase();
-
   if (!Number.isInteger(row) || row < 2) {
     throw new Error('Dòng tải tệp không hợp lệ.');
   }
-
   if (!['BILL', 'FILE_CUNG'].includes(loai)) {
     throw new Error('Loại tệp không hợp lệ.');
   }
+  if (loai === 'BILL' && !xacThucTokenBill_(row, String(payload.token || ''))) {
+    throw new Error('Link tải Bill không hợp lệ hoặc đã cũ. Hãy bấm lại nút ở cột N.');
+  }
 
-  const allowedMimeTypes = [
-    'application/pdf',
-    'image/jpeg',
-    'image/png'
-  ];
+  const allowedMimeTypes = ['application/pdf', 'image/jpeg', 'image/png'];
   const allowedExtensions = ['.pdf', '.jpg', '.jpeg', '.png'];
   const lowerName = originalName.toLowerCase();
-
   if (
     !allowedMimeTypes.includes(mimeType) ||
     !allowedExtensions.some(extension => lowerName.endsWith(extension))
   ) {
     throw new Error('Chỉ được tải lên PDF, JPG hoặc PNG.');
   }
-
   const bytes = Utilities.base64Decode(payload.base64);
-  const maxBytes = CONFIG.UPLOAD_MAX_SIZE_MB * 1024 * 1024;
-
-  if (bytes.length > maxBytes) {
-    throw new Error(
-      'Tệp vượt quá ' + CONFIG.UPLOAD_MAX_SIZE_MB + ' MB.'
-    );
+  if (bytes.length > CONFIG.UPLOAD_MAX_SIZE_MB * 1024 * 1024) {
+    throw new Error('Tệp vượt quá ' + CONFIG.UPLOAD_MAX_SIZE_MB + ' MB.');
   }
 
   const ss = laySpreadsheet_();
   const sheet = ss.getSheetByName(CONFIG.SHEET_NAME);
+  if (!sheet) throw new Error('Không tìm thấy tab: ' + CONFIG.SHEET_NAME);
 
-  if (!sheet) {
-    throw new Error('Không tìm thấy tab: ' + CONFIG.SHEET_NAME);
-  }
-
-  const activeEmail = layEmailNguoiDung_();
-  const ownerEmail = layEmailChuSoHuu_(ss);
   let linkColumn;
   let lanTai;
-  let billUploaderEmailToSave = '';
-
   if (loai === 'BILL') {
+    const expectedExecutor = String(PropertiesService.getScriptProperties()
+      .getProperty('BILL_EXECUTOR_EMAIL') || '').trim().toLowerCase();
+    const effectiveEmail = String(Session.getEffectiveUser().getEmail() || '')
+      .trim().toLowerCase();
+    if (!expectedExecutor || effectiveEmail !== expectedExecutor) {
+      throw new Error(
+        'Web App đang chạy bằng tài khoản người tải. Hãy sửa triển khai thành ' +
+        '“Thực thi bằng tôi” với cùng tài khoản đã chạy caiDatHeThong.'
+      );
+    }
     const billLinks = sheet.getRange(
-      row,
-      CONFIG.BILL_FIRST_LINK_COLUMN,
-      1,
-      CONFIG.BILL_LINK_COUNT
+      row, CONFIG.BILL_FIRST_LINK_COLUMN, 1, CONFIG.BILL_LINK_COUNT
     ).getDisplayValues()[0];
-    const emptyBillIndex = billLinks.findIndex(
-      link => String(link || '').trim() === ''
-    );
-
+    const emptyBillIndex = billLinks.findIndex(link => !String(link || '').trim());
     if (emptyBillIndex === -1) {
       throw new Error('Dòng này đã tải đủ 3 Minh Chứng Bill.');
     }
-
-    const emailCell = sheet.getRange(
-      row,
-      CONFIG.BILL_UPLOADER_EMAIL_COLUMN
-    );
-    const firstUploaderEmail = String(
-      emailCell.getDisplayValue() || ''
-    ).trim().toLowerCase();
-
-    if (
-      firstUploaderEmail &&
-      activeEmail !== firstUploaderEmail &&
-      activeEmail !== ownerEmail
-    ) {
-      throw new Error(
-        'Chỉ ' + firstUploaderEmail +
-        ' được tải Bill lần tiếp theo cho dòng này.'
-      );
-    }
-
-    if (!firstUploaderEmail) {
-      billUploaderEmailToSave = activeEmail;
-    }
-
     linkColumn = CONFIG.BILL_FIRST_LINK_COLUMN + emptyBillIndex;
     lanTai = String(emptyBillIndex + 1).padStart(2, '0');
   } else {
-    if (activeEmail !== ownerEmail) {
-      throw new Error(
-        'Chỉ chủ sở hữu bảng tính được tải FILE CỨNG.'
-      );
+    if (layEmailNguoiDung_() !== layEmailChuSoHuu_(ss)) {
+      throw new Error('Chỉ chủ sở hữu bảng tính được tải FILE CỨNG.');
     }
-
-    const currentHardFileLink = String(
+    const currentLink = String(
       sheet.getRange(row, CONFIG.HARD_LINK_COLUMN).getDisplayValue() || ''
     ).trim();
-
-    if (currentHardFileLink) {
-      throw new Error('Dòng này đã có FILE CỨNG.');
-    }
-
+    if (currentLink) throw new Error('Dòng này đã có FILE CỨNG.');
     linkColumn = CONFIG.HARD_LINK_COLUMN;
     lanTai = '01';
   }
 
   const stt = String(sheet.getRange(row, 1).getDisplayValue() || '').trim();
-
-  if (!stt) {
-    throw new Error('Dòng ' + row + ' chưa có STT ở cột A.');
+  if (!stt) throw new Error('Dòng ' + row + ' chưa có STT ở cột A.');
+  let parentFolder;
+  try {
+    parentFolder = DriveApp.getFolderById(CONFIG.FOLDER_ID);
+    parentFolder.getName();
+  } catch (error) {
+    throw new Error(
+      'Tài khoản thực thi Web App không mở được thư mục cha. ' +
+      'Kiểm tra FOLDER_ID và quyền Drive. Chi tiết: ' + error.message
+    );
   }
+  const sttFolder = layHoacTaoThuMucStt_(parentFolder, stt);
+  const targetFolder = loai === 'BILL'
+    ? layHoacTaoThuMucBill_(sheet, row, sttFolder)
+    : sttFolder;
 
-  const mainFolder = DriveApp.getFolderById(CONFIG.FOLDER_ID);
-  const targetFolder = layHoacTaoThuMucStt_(mainFolder, stt);
   const safeName = originalName.replace(/[\\/:*?"<>|]/g, '_');
   const blob = Utilities.newBlob(bytes, mimeType, safeName);
   const file = targetFolder.createFile(blob);
+  file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  const viewUrl = 'https://drive.google.com/file/d/' + file.getId() + '/view';
 
-  file.setSharing(
-    DriveApp.Access.ANYONE_WITH_LINK,
-    DriveApp.Permission.VIEW
-  );
-
-  const viewUrl =
-    'https://drive.google.com/file/d/' + file.getId() + '/view';
-
+  sheet.getRange(row, linkColumn).setValue(viewUrl);
   if (loai === 'BILL') {
     sheet.getRange(row, CONFIG.BILL_UPLOAD_COLUMN).setNote(
-      'Đã tải ' + lanTai + '/03'
+      'Đã tải ' + lanTai + '/03; tệp do tài khoản triển khai sở hữu, link chỉ xem.'
     );
-
-    if (billUploaderEmailToSave) {
-      sheet.getRange(
-        row,
-        CONFIG.BILL_UPLOADER_EMAIL_COLUMN
-      ).setValue(billUploaderEmailToSave);
-    }
   } else {
-    sheet.getRange(row, CONFIG.HARD_UPLOAD_COLUMN).setNote(
-      'Đã tải: ' + safeName
-    );
+    sheet.getRange(row, CONFIG.HARD_UPLOAD_COLUMN).setNote('Đã tải: ' + safeName);
   }
-  sheet.getRange(row, linkColumn).setValue(viewUrl);
   SpreadsheetApp.flush();
-
   return {
     fileName: safeName,
     url: viewUrl,
     row: row,
-    lanTai: lanTai
+    lanTai: lanTai,
+    viewOnly: loai === 'BILL'
   };
+}
+
+function layHoacTaoThuMucBill_(sheet, row, sttFolder) {
+  const folderId = String(sheet.getRange(
+    row, CONFIG.BILL_FOLDER_ID_COLUMN
+  ).getDisplayValue() || '').trim();
+  let folder;
+  if (folderId) {
+    folder = DriveApp.getFolderById(folderId);
+  } else {
+    const folders = sttFolder.getFoldersByName(CONFIG.BILL_FOLDER_NAME);
+    folder = folders.hasNext()
+      ? folders.next()
+      : sttFolder.createFolder(CONFIG.BILL_FOLDER_NAME);
+  }
+  if (folder.getName() !== CONFIG.BILL_FOLDER_NAME) {
+    throw new Error('ID thư mục Bill ở cột AB không đúng thư mục Bill.');
+  }
+  const parents = folder.getParents();
+  if (!parents.hasNext() || parents.next().getId() !== sttFolder.getId()) {
+    throw new Error('Thư mục Bill ở cột AB không nằm trong thư mục STT của dòng.');
+  }
+  if (!folderId) {
+    sheet.getRange(row, CONFIG.BILL_FOLDER_ID_COLUMN).setValue(folder.getId());
+  }
+  return folder;
 }
 
 function laySpreadsheet_() {
@@ -482,7 +534,15 @@ function laySpreadsheet_() {
     );
   }
 
-  return SpreadsheetApp.openById(spreadsheetId);
+  try {
+    return SpreadsheetApp.openById(spreadsheetId);
+  } catch (error) {
+    throw new Error(
+      'Không mở được bảng tính. Hãy chạy lại caiDatHeThong trên đúng ' +
+      'bảng tính và kiểm tra quyền của tài khoản thực thi Web App. ' +
+      'Chi tiết: ' + error.message
+    );
+  }
 }
 
 function layEmailNguoiDung_() {
@@ -501,7 +561,16 @@ function layEmailNguoiDung_() {
 }
 
 function layEmailChuSoHuu_(spreadsheet) {
-  const owner = DriveApp.getFileById(spreadsheet.getId()).getOwner();
+  let owner;
+  try {
+    owner = DriveApp.getFileById(spreadsheet.getId()).getOwner();
+  } catch (error) {
+    throw new Error(
+      'Không đọc được chủ sở hữu bảng tính trên Drive. ' +
+      'Hãy kiểm tra quyền của tài khoản thực thi Web App. ' +
+      'Chi tiết: ' + error.message
+    );
+  }
   return owner
     ? String(owner.getEmail() || '').trim().toLowerCase()
     : '';
@@ -531,14 +600,16 @@ function dinhDangStt_(stt) {
 
 
 // ========================================
-// 4. KHÓA VÙNG LINK J:L VÀ FILE CỨNG R:S
+// 4. KHÓA VÙNG LINK J:L, N:Q, FILE CỨNG R:S VÀ ID THƯ MỤC BILL AB
 // Chủ sở hữu bảng tính vẫn có thể chỉnh sửa.
 // ========================================
 
 function khoaVungLink(sheet, maxRows) {
   const protectionDescriptions = [
     CONFIG.LINK_PROTECTION_DESCRIPTION,
-    CONFIG.HARD_FILE_PROTECTION_DESCRIPTION
+    CONFIG.BILL_LINK_PROTECTION_DESCRIPTION,
+    CONFIG.HARD_FILE_PROTECTION_DESCRIPTION,
+    CONFIG.BILL_CONFIG_PROTECTION_DESCRIPTION
   ];
 
   sheet.getProtections(SpreadsheetApp.ProtectionType.RANGE)
@@ -565,11 +636,29 @@ function khoaVungLink(sheet, maxRows) {
     {
       range: sheet.getRange(
         2,
+        CONFIG.BILL_UPLOAD_COLUMN,
+        maxRows - 1,
+        1 + CONFIG.BILL_LINK_COUNT
+      ),
+      description: CONFIG.BILL_LINK_PROTECTION_DESCRIPTION
+    },
+    {
+      range: sheet.getRange(
+        2,
         CONFIG.HARD_UPLOAD_COLUMN,
         maxRows - 1,
         2
       ),
       description: CONFIG.HARD_FILE_PROTECTION_DESCRIPTION
+    },
+    {
+      range: sheet.getRange(
+        2,
+        CONFIG.BILL_FOLDER_ID_COLUMN,
+        maxRows - 1,
+        1
+      ),
+      description: CONFIG.BILL_CONFIG_PROTECTION_DESCRIPTION
     }
   ];
   const effectiveUser = Session.getEffectiveUser();
