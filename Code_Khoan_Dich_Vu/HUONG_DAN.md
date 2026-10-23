@@ -9,6 +9,7 @@ Trong tài liệu mẫu, thay nội dung bôi vàng bằng các biến sau:
 | Phần số hợp đồng `141026-01/LASHE` | `{{SO_HD}}` |
 | Ngày ký `14/07/2026` | `{{NGAY_LAM_DON}}` |
 | Họ và tên Bên B | `{{HO_TEN}}` |
+| Họ và tên Bên B tại dòng ký tên (in hoa) | `{{HO_TEN_IN_HOA}}` |
 | Số CCCD | `{{SO_CCCD}}` |
 | Mã số thuế | `{{MA_SO_THUE}}` |
 | Địa chỉ | `{{DIA_CHI}}` |

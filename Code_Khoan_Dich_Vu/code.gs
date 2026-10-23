@@ -716,6 +716,7 @@ function taoHopDongChoDong_(sheet, row) {
       '{{SO_HD}}': stt,
       '{{STT}}': stt,
       '{{HO_TEN}}': hoTen,
+      '{{HO_TEN_IN_HOA}}': hoTen.toLocaleUpperCase('vi-VN'),
       '{{NGAY_LAM_DON}}': ngayLamDon,
       '{{NGAY}}': ngayKy.ngay,
       '{{THANG}}': ngayKy.thang,
@@ -1059,6 +1060,7 @@ function khoaCotLink_(sheet, maxRows) {
 const TEMPLATE_FIELDS = [
   '{{SO_HD}}',
   '{{HO_TEN}}',
+  '{{HO_TEN_IN_HOA}}',
   '{{NGAY_LAM_DON}}',
   '{{NGAY}}', '{{THANG}}', '{{NAM}}',
   '{{SO_CCCD}}',

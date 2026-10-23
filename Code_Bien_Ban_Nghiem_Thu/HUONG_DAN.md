@@ -15,6 +15,7 @@ Các phần màu vàng dùng biến sau:
 | Nội dung | Biến |
 |---|---|
 | Họ và tên | `{{HO_TEN}}` |
+| Họ và tên tại dòng ký tên (in hoa) | `{{HO_TEN_IN_HOA}}` |
 | Ngày lập biên bản dạng đầy đủ | `{{NGAY_LAM_DON}}` |
 | Ngày, tháng, năm lập biên bản viết tách | `{{NGAY}}`, `{{THANG}}`, `{{NAM}}` |
 | Số CCCD | `{{SO_CCCD}}` |
