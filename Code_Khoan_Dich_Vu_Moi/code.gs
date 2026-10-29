@@ -8,12 +8,12 @@
  * AD   - Link FILE CỨNG
  * AE   - Trạng thái nghiệp vụ (không do code này xử lý)
  *
- * Trước khi sử dụng, thay các phần bôi vàng trong Google Docs mẫu bằng
- * các biến {{...}} được liệt kê trong TEMPLATE_FIELDS ở cuối file.
+ * Đặt các biến {{...}} trong Google Docs mẫu theo TEMPLATE_FIELDS ở cuối file.
+ * Riêng các số mẫu ở mục 3.2–3.3 được đổi thành biến trên bản sao hợp đồng.
  */
 
 const CONFIG = {
-  SHEET_NAME: 'TH_HỢP ĐỒNG KHOÁN DỊCH VỤ',
+  SHEET_NAME: 'HỢP ĐỒNG KHOÁN MẪU CÁ NHÂN',
   SPREADSHEET_ID: '1uFp7McsEUjFQzMsQrW0ZSiqxQe7324Wy6KMzsHP_Mq0',
 
   TEMPLATE_URL:
@@ -33,8 +33,8 @@ const CONFIG = {
   HARD_FILE_PROTECTION_DESCRIPTION: 'KHOA_FILE_CUNG_HOP_DONG_TU_DONG',
   HARD_UPLOAD_COLUMN: 29, // AC
   HARD_LINK_COLUMN: 30,   // AD
-  AMOUNT_COLUMN: 21,       // U
-  AMOUNT_WORDS_COLUMN: 22, // V
+  AMOUNT_COLUMN: 21,       // U: Số tiền thực nhận sau thuế
+  AMOUNT_WORDS_COLUMN: 22, // V: Số tiền thực nhận sau thuế bằng chữ (tự điền)
   UPLOAD_MAX_SIZE_MB: 10
 };
 
@@ -431,7 +431,7 @@ function vietBaChuSo_(number, docDuBaChuSo) {
   return words.join(' ');
 }
 
-/** Viết số tiền đồng bằng chữ, giữ cách hiển thị của cột V hiện tại (không thêm "đồng"). */
+/** Viết số tiền đồng bằng chữ, không thêm "đồng" vì mẫu đã có từ này. */
 function vietSoTienBangChu_(amount) {
   const units = ['', 'nghìn', 'triệu', 'tỷ', 'nghìn tỷ'];
   const groups = [];
@@ -456,10 +456,26 @@ function vietSoTienBangChu_(amount) {
   return result.charAt(0).toUpperCase() + result.slice(1);
 }
 
-function capNhatThuLaoBangChu_(sheet, row) {
+function capNhatTienThucNhanBangChu_(sheet, row) {
   const amount = docSoTien_(sheet.getRange(row, CONFIG.AMOUNT_COLUMN).getValue());
   sheet.getRange(row, CONFIG.AMOUNT_WORDS_COLUMN)
     .setValue(amount === null ? '' : vietSoTienBangChu_(amount));
+}
+
+/** Tính thù lao trước thuế từ số thực nhận, làm tròn đến đồng. */
+function tinhThuLaoTruocThue_(soTienThucNhan) {
+  const tongThuLao = Math.round(soTienThucNhan / 0.9);
+  if (!Number.isSafeInteger(tongThuLao)) {
+    throw new Error('Số tiền thực nhận ở cột U quá lớn để tính thù lao trước thuế.');
+  }
+  return {
+    tongThuLao: tongThuLao,
+    thueTncn: tongThuLao - soTienThucNhan
+  };
+}
+
+function dinhDangSoTien_(amount) {
+  return String(amount).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
 }
 
 function xuLyTaoHopDong(e) {
@@ -476,7 +492,7 @@ function xuLyTaoHopDong(e) {
     range.getLastColumn() >= CONFIG.AMOUNT_COLUMN
   ) {
     for (let row = Math.max(2, range.getRow()); row <= range.getLastRow(); row++) {
-      capNhatThuLaoBangChu_(sheet, row);
+      capNhatTienThucNhanBangChu_(sheet, row);
     }
   }
 
@@ -610,8 +626,8 @@ function taoHopDongChoDong_(sheet, row) {
     'Nội dung Diễn Viên',
     'Số lượng Diễn viên',
     'Ngày hoàn thành công việc',
-    'Tổng giá trị thù lao giao khoán',
-    'Tổng giá trị thù lao giao khoán (Bằng chữ)',
+    'Số tiền thực nhận sau thuế',
+    'Số tiền thực nhận sau thuế (Bằng chữ)',
     'Số Tài khoản',
     'Mở Tại'
   ];
@@ -622,13 +638,14 @@ function taoHopDongChoDong_(sheet, row) {
   ];
   const missing = [];
 
-  const amount = docSoTien_(rawValues[CONFIG.AMOUNT_COLUMN - 1]);
-  if (amount === null) {
-    throw new Error('Tổng giá trị thù lao ở cột U phải là số nguyên lớn hơn 0 (ví dụ: 2,160,000).');
+  const soTienThucNhan = docSoTien_(rawValues[CONFIG.AMOUNT_COLUMN - 1]);
+  if (soTienThucNhan === null) {
+    throw new Error('Số tiền thực nhận ở cột U phải là số nguyên lớn hơn 0 (ví dụ: 6.750.000).');
   }
-  const amountWords = vietSoTienBangChu_(amount);
-  sheet.getRange(row, CONFIG.AMOUNT_WORDS_COLUMN).setValue(amountWords);
-  displayValues[CONFIG.AMOUNT_WORDS_COLUMN - 1] = amountWords;
+  const soTienThucNhanBangChu = vietSoTienBangChu_(soTienThucNhan);
+  sheet.getRange(row, CONFIG.AMOUNT_WORDS_COLUMN).setValue(soTienThucNhanBangChu);
+  displayValues[CONFIG.AMOUNT_WORDS_COLUMN - 1] = soTienThucNhanBangChu;
+  const { tongThuLao, thueTncn } = tinhThuLaoTruocThue_(soTienThucNhan);
 
   // Cột A do code tự sinh; bắt buộc người dùng nhập đầy đủ B:X.
   for (let i = 1; i < headers.length; i++) {
@@ -692,8 +709,8 @@ function taoHopDongChoDong_(sheet, row) {
     noiDungDienVien,
     soLuongDienVien,
     ngayHoanThanh,
-    tongThuLao,
-    tongThuLaoBangChu,
+    soTienThucNhanHienThi,
+    soTienThucNhanBangChuHienThi,
     soTaiKhoan,
     moTai
   ] = displayValues;
@@ -713,6 +730,7 @@ function taoHopDongChoDong_(sheet, row) {
   try {
     const doc = DocumentApp.openById(copy.getId());
     dienBienNganHangVaoMau_(doc);
+    dienBienThuLaoVaoMau_(doc);
     const replacements = {
       '{{SO_HD}}': stt,
       '{{STT}}': stt,
@@ -742,8 +760,11 @@ function taoHopDongChoDong_(sheet, row) {
       '{{NGAY_HT}}': ngayHoanTat.ngay,
       '{{THANG_HT}}': ngayHoanTat.thang,
       '{{NAM_HT}}': ngayHoanTat.nam,
-      '{{TONG_THU_LAO}}': tongThuLao,
-      '{{TONG_THU_LAO_BANG_CHU}}': tongThuLaoBangChu,
+      '{{TONG_THU_LAO}}': dinhDangSoTien_(tongThuLao),
+      '{{TONG_THU_LAO_BANG_CHU}}': vietSoTienBangChu_(tongThuLao),
+      '{{THUE_TNCN}}': dinhDangSoTien_(thueTncn),
+      '{{SO_TIEN_THUC_NHAN}}': dinhDangSoTien_(soTienThucNhan),
+      '{{SO_TIEN_THUC_NHAN_BANG_CHU}}': soTienThucNhanBangChuHienThi,
       '{{SO_TAI_KHOAN}}': soTaiKhoan,
       '{{MO_TAI}}': moTai
     };
@@ -872,6 +893,33 @@ function dienBienNganHangVaoMau_(doc) {
       throw new Error('Mẫu hợp đồng thiếu vị trí "' + field.label + '".');
     }
     body.replaceText(field.label, field.label + ' ' + field.token);
+  });
+}
+
+/** Đổi ví dụ cố định ở mục 3.2–3.3 thành biến trên bản sao mẫu. */
+function dienBienThuLaoVaoMau_(doc) {
+  const body = doc.getBody();
+  const fields = [
+    { sample: '750.000', token: '{{THUE_TNCN}}' },
+    { sample: '6.750.000', token: '{{SO_TIEN_THUC_NHAN}}' },
+    {
+      sample: 'Sáu triệu bảy trăm năm mươi nghìn',
+      token: '{{SO_TIEN_THUC_NHAN_BANG_CHU}}'
+    }
+  ];
+
+  // Thay số dài trước để "750.000" không khớp một phần của "6.750.000".
+  fields.sort((a, b) => b.sample.length - a.sample.length);
+  fields.forEach(field => {
+    if (body.getText().includes(field.token)) return;
+    if (!body.getText().includes(field.sample)) {
+      throw new Error('Mẫu hợp đồng thiếu biến hoặc giá trị mẫu: ' + field.token);
+    }
+    const escapedSample = field.sample.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    body.replaceText(escapedSample, field.token);
+    if (!body.getText().includes(field.token)) {
+      throw new Error('Không thể thay giá trị mẫu bằng biến: ' + field.token);
+    }
   });
 }
 
@@ -1063,6 +1111,9 @@ const TEMPLATE_FIELDS = [
   '{{NGAY_HOAN_THANH}}',
   '{{TONG_THU_LAO}}',
   '{{TONG_THU_LAO_BANG_CHU}}',
+  '{{THUE_TNCN}}',
+  '{{SO_TIEN_THUC_NHAN}}',
+  '{{SO_TIEN_THUC_NHAN_BANG_CHU}}',
   '{{SO_TAI_KHOAN}}',
   '{{MO_TAI}}'
 ];
