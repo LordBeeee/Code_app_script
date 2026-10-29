@@ -13,7 +13,7 @@
  */
 
 const BBNT_CONFIG = {
-  SHEET_NAME: 'TH_BIÊN BẢN NGHIỆM THU',
+  SHEET_NAME: 'BBNT MẪU CÁ NHÂN',
 
   SPREADSHEET_URL:
     'https://docs.google.com/spreadsheets/d/1uFp7McsEUjFQzMsQrW0ZSiqxQe7324Wy6KMzsHP_Mq0/edit?gid=1546770827#gid=1546770827',
