@@ -1,12 +1,12 @@
 /**
  * TỰ ĐỘNG TẠO HỢP ĐỒNG KHOÁN DỊCH VỤ
  *
- * A:X - Dữ liệu hợp đồng (H là Tên Brand, W là Số Tài khoản, X là Mở Tại)
- * Y:AA - Link Word lần 01, 02, 03
- * AB   - Checkbox tạo Word
- * AC   - Tải PDF/JPG/PNG FILE CỨNG
- * AD   - Link FILE CỨNG
- * AE   - Trạng thái nghiệp vụ (không do code này xử lý)
+ * A:W - Dữ liệu hợp đồng (đã xóa cột Tên Brand; V là Số Tài khoản, W là Mở Tại)
+ * X:Z - Link Word lần 01, 02, 03
+ * AA  - Checkbox tạo Word
+ * AB  - Tải PDF/JPG/PNG FILE CỨNG
+ * AC  - Link FILE CỨNG
+ * AD  - Trạng thái nghiệp vụ (không do code này xử lý)
  *
  * Đặt các biến {{...}} trong Google Docs mẫu theo TEMPLATE_FIELDS ở cuối file.
  * Riêng các số mẫu ở mục 3.2–3.3 được đổi thành biến trên bản sao hợp đồng.
@@ -26,15 +26,15 @@ const CONFIG = {
   // Sau khi triển khai Web App, dán URL kết thúc bằng /exec vào đây.
   WEB_APP_URL: 'https://script.google.com/a/macros/getvini.com/s/AKfycbwkG4U2MgM9aywiEcV7yKikOko-Wh0VRqE9OXGg3QC292L9AAxZ3u1mzb9UVrbDERO2hg/exec',
 
-  FIRST_LINK_COLUMN: 25, // Y
-  LINK_COUNT: 3,         // Y, Z, AA
-  ACTION_COLUMN: 28,     // AB
+  FIRST_LINK_COLUMN: 24, // X
+  LINK_COUNT: 3,         // X, Y, Z
+  ACTION_COLUMN: 27,     // AA
   LINK_PROTECTION_DESCRIPTION: 'KHOA_LINK_HOP_DONG_TU_DONG',
   HARD_FILE_PROTECTION_DESCRIPTION: 'KHOA_FILE_CUNG_HOP_DONG_TU_DONG',
-  HARD_UPLOAD_COLUMN: 29, // AC
-  HARD_LINK_COLUMN: 30,   // AD
-  AMOUNT_COLUMN: 21,       // U: Số tiền thực nhận sau thuế
-  AMOUNT_WORDS_COLUMN: 22, // V: Số tiền thực nhận sau thuế bằng chữ (tự điền)
+  HARD_UPLOAD_COLUMN: 28, // AB
+  HARD_LINK_COLUMN: 29,   // AC
+  AMOUNT_COLUMN: 20,       // T: Số tiền thực nhận sau thuế
+  AMOUNT_WORDS_COLUMN: 21, // U: Số tiền thực nhận sau thuế bằng chữ (tự điền)
   UPLOAD_MAX_SIZE_MB: 10
 };
 
@@ -93,7 +93,7 @@ function onOpen() {
 
 /**
  * Chạy hàm này đúng một lần sau khi dán code.
- * Hàm tạo Y:AB, FILE CỨNG tại AC:AD và installable onEdit trigger.
+ * Hàm tạo X:AA, FILE CỨNG tại AB:AC và installable onEdit trigger.
  */
 function caiDatHeThong() {
   const ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
@@ -102,6 +102,7 @@ function caiDatHeThong() {
   if (!sheet) {
     throw new Error('Không tìm thấy tab: ' + CONFIG.SHEET_NAME);
   }
+  kiemTraBoCucHopDong_(sheet);
 
   const templateId = layIdGoogleDoc_(CONFIG.TEMPLATE_URL);
   const template = DriveApp.getFileById(templateId);
@@ -121,13 +122,13 @@ function caiDatHeThong() {
 
   xoaCongThucSttCu_(sheet);
 
-  sheet.getRange('Y1:AB1').setValues([[
+  sheet.getRange('X1:AA1').setValues([[
     'Link_Word_01',
     'Link_Word_02',
     'Link_Word_03',
     'TẠO WORD'
   ]]);
-  sheet.getRange('AC1:AD1').setValues([[
+  sheet.getRange('AB1:AC1').setValues([[
     'FILE CỨNG',
     'Link_FILE_Cung'
   ]]);
@@ -166,8 +167,8 @@ function caiDatHeThong() {
 
   ss.toast(
     coLinkWebAppHopLe_()
-      ? 'Đã tạo checkbox AB và nút tải FILE CỨNG tại AC.'
-      : 'Đã cài hợp đồng. Hãy triển khai Web App và điền WEB_APP_URL để tạo nút AC.',
+      ? 'Đã tạo checkbox AA và nút tải FILE CỨNG tại AB.'
+      : 'Đã cài hợp đồng. Hãy triển khai Web App và điền WEB_APP_URL để tạo nút AB.',
     'Cài đặt thành công',
     8
   );
@@ -176,6 +177,19 @@ function caiDatHeThong() {
 function coLinkWebAppHopLe_() {
   return /^https:\/\/script\.google\.com\/(?:macros\/s|a\/macros\/[^/]+\/s)\/[^/?#]+\/exec(?:[?#].*)?$/
     .test(String(CONFIG.WEB_APP_URL || '').trim());
+}
+
+/** Ngăn ghi nhầm cột nếu Sheet vẫn còn cột Tên Brand ở H. */
+function coBoCucHopDongMoi_(sheet) {
+  const projectHeader = String(sheet.getRange('H1').getDisplayValue() || '').trim();
+  const firstLinkHeader = String(sheet.getRange('X1').getDisplayValue() || '').trim();
+  return projectHeader === 'Tên dự án' && firstLinkHeader === 'Link_Word_01';
+}
+
+function kiemTraBoCucHopDong_(sheet) {
+  if (!coBoCucHopDongMoi_(sheet)) {
+    throw new Error('Bố cục Sheet chưa đúng: hãy xóa hẳn cột H (Tên Brand) trước khi chạy code mới.');
+  }
 }
 
 /** Dùng lại mẫu nút upload của Đề nghị thanh toán, chỉ tạo FILE CỨNG. */
@@ -387,7 +401,7 @@ function layEmailChuSoHuu_(spreadsheet) {
 
 
 // ========================================
-// 2. TỰ ĐIỀN CỘT V VÀ XỬ LÝ CHECKBOX Ở CỘT AB
+// 2. TỰ ĐIỀN CỘT U VÀ XỬ LÝ CHECKBOX Ở CỘT AA
 // ========================================
 
 /** Nhận số Sheets hoặc số tiền nhập dạng 2,160,000 / 2.160.000. */
@@ -442,7 +456,7 @@ function vietSoTienBangChu_(amount) {
     remaining = Math.floor(remaining / 1000);
   }
   if (groups.length > units.length) {
-    throw new Error('Số tiền ở cột U quá lớn để chuyển thành chữ.');
+    throw new Error('Số tiền ở cột T quá lớn để chuyển thành chữ.');
   }
 
   const words = [];
@@ -466,7 +480,7 @@ function capNhatTienThucNhanBangChu_(sheet, row) {
 function tinhThuLaoTruocThue_(soTienThucNhan) {
   const tongThuLao = Math.round(soTienThucNhan / 0.9);
   if (!Number.isSafeInteger(tongThuLao)) {
-    throw new Error('Số tiền thực nhận ở cột U quá lớn để tính thù lao trước thuế.');
+    throw new Error('Số tiền thực nhận ở cột T quá lớn để tính thù lao trước thuế.');
   }
   return {
     tongThuLao: tongThuLao,
@@ -485,8 +499,9 @@ function xuLyTaoHopDong(e) {
   const sheet = range.getSheet();
 
   if (sheet.getName() !== CONFIG.SHEET_NAME) return;
+  if (!coBoCucHopDongMoi_(sheet)) return;
 
-  // Hỗ trợ cả khi dán nhiều dòng hoặc nhiều cột có chứa U.
+  // Hỗ trợ cả khi dán nhiều dòng hoặc nhiều cột có chứa T.
   if (
     range.getColumn() <= CONFIG.AMOUNT_COLUMN &&
     range.getLastColumn() >= CONFIG.AMOUNT_COLUMN
@@ -584,26 +599,21 @@ function taoHopDongDongDangChon() {
 // ========================================
 
 function taoHopDongChoDong_(sheet, row) {
+  kiemTraBoCucHopDong_(sheet);
   xoaCongThucSttCu_(sheet);
 
-  // A:X là dữ liệu, Y:AA là ba link đã tạo.
+  // A:W là dữ liệu, X:Z là ba link đã tạo.
   const displayValues = sheet.getRange(row, 1, 1, CONFIG.FIRST_LINK_COLUMN + CONFIG.LINK_COUNT - 1)
     .getDisplayValues()[0];
   const rawValues = sheet.getRange(row, 1, 1, CONFIG.FIRST_LINK_COLUMN - 1).getValues()[0];
 
   const ngayLamDonHienThi = String(displayValues[2] || '').trim();
-  const tenBrandHienThi = String(displayValues[7] || '').trim();
 
   if (!ngayLamDonHienThi) {
     throw new Error('Thiếu Ngày làm đơn ở cột C.');
   }
 
-  if (!tenBrandHienThi) {
-    throw new Error('Thiếu Tên Brand ở cột H.');
-  }
-
   const ngayKy = tachNgay_(ngayLamDonHienThi);
-  chuanHoaBrand_(tenBrandHienThi);
 
   const headers = [
     'Số hợp đồng',
@@ -613,7 +623,6 @@ function taoHopDongChoDong_(sheet, row) {
     'Mã số thuế',
     'Địa chỉ',
     'Số điện thoại',
-    'Tên Brand',
     'Tên dự án',
     'Số lượng Video (Công việc giao khoán)',
     'Nội dung Kịch bản',
@@ -640,14 +649,14 @@ function taoHopDongChoDong_(sheet, row) {
 
   const soTienThucNhan = docSoTien_(rawValues[CONFIG.AMOUNT_COLUMN - 1]);
   if (soTienThucNhan === null) {
-    throw new Error('Số tiền thực nhận ở cột U phải là số nguyên lớn hơn 0 (ví dụ: 6.750.000).');
+    throw new Error('Số tiền thực nhận ở cột T phải là số nguyên lớn hơn 0 (ví dụ: 6.750.000).');
   }
   const soTienThucNhanBangChu = vietSoTienBangChu_(soTienThucNhan);
   sheet.getRange(row, CONFIG.AMOUNT_WORDS_COLUMN).setValue(soTienThucNhanBangChu);
   displayValues[CONFIG.AMOUNT_WORDS_COLUMN - 1] = soTienThucNhanBangChu;
   const { tongThuLao, thueTncn } = tinhThuLaoTruocThue_(soTienThucNhan);
 
-  // Cột A do code tự sinh; bắt buộc người dùng nhập đầy đủ B:X.
+  // Cột A do code tự sinh; bắt buộc người dùng nhập đầy đủ B:W.
   for (let i = 1; i < headers.length; i++) {
     const value = String(displayValues[i] ?? '').trim();
 
@@ -674,7 +683,7 @@ function taoHopDongChoDong_(sheet, row) {
   }
 
   // Kiểm tra ngày hoàn thành trước khi cấp số hợp đồng.
-  const ngayHoanTat = tachNgay_(displayValues[19]);
+  const ngayHoanTat = tachNgay_(displayValues[18]);
   let soHopDong = String(displayValues[0] || '').trim();
 
   // Giữ số đã dùng trong Word của dòng này, kể cả số theo định dạng cũ.
@@ -696,7 +705,6 @@ function taoHopDongChoDong_(sheet, row) {
     maSoThue,
     diaChi,
     soDienThoai,
-    tenBrand,
     tenDuAn,
     soLuongCongViec,
     noiDungKichBan,
@@ -744,7 +752,7 @@ function taoHopDongChoDong_(sheet, row) {
       '{{MA_SO_THUE}}': maSoThue,
       '{{DIA_CHI}}': diaChi,
       '{{SO_DIEN_THOAI}}': soDienThoai,
-      '{{TEN_BRAND}}': tenBrand,
+      '{{TEN_BRAND}}': '', // Xóa biến Brand còn sót trong mẫu cũ.
       '{{TEN_DU_AN}}': tenDuAn,
       '{{SO_LUONG_CONG_VIEC}}': soLuongCongViec,
       '{{NOI_DUNG_KICH_BAN}}': noiDungKichBan,
@@ -811,8 +819,8 @@ function taoHopDongChoDong_(sheet, row) {
 // ========================================
 
 /**
- * Cấp số nguyên liên tiếp từ 3000, không ghép ngày hoặc Brand.
- * Chỉ các dòng có ít nhất một link Word tại Y:AA mới được tính.
+ * Cấp số nguyên liên tiếp từ 3000.
+ * Chỉ các dòng có ít nhất một link Word tại X:Z mới được tính.
  */
 function taoSoHopDongMoi_(sheet, currentRow) {
   const lastRow = Math.max(sheet.getLastRow(), 2);
@@ -841,24 +849,6 @@ function taoSoHopDongMoi_(sheet, currentRow) {
   });
 
   return String(maxSequence + 1);
-}
-
-function chuanHoaBrand_(brand) {
-  const normalized = String(brand || '')
-    .trim()
-    .toUpperCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/Đ/g, 'D')
-    .replace(/[^A-Z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .replace(/-+/g, '-');
-
-  if (!normalized) {
-    throw new Error('Tên Brand ở cột H không hợp lệ.');
-  }
-
-  return normalized;
 }
 
 /** Chỉ xóa công thức ARRAYFORMULA tạo STT cũ; không xóa số hợp đồng đã tạo. */
@@ -1020,7 +1010,7 @@ function lamSachTenFile_(name) {
     .trim();
 }
 
-/** Khóa vùng link Word Y:AA và FILE CỨNG AC:AD. */
+/** Khóa vùng link Word X:Z và FILE CỨNG AB:AC. */
 function khoaCotLink_(sheet, maxRows) {
   const protectionDescriptions = [
     CONFIG.LINK_PROTECTION_DESCRIPTION,
@@ -1096,7 +1086,6 @@ const TEMPLATE_FIELDS = [
   '{{MA_SO_THUE}}',
   '{{DIA_CHI}}',
   '{{SO_DIEN_THOAI}}',
-  '{{TEN_BRAND}}',
   '{{TEN_DU_AN}}',
   '{{SO_LUONG_CONG_VIEC}}',
   '{{NOI_DUNG_KICH_BAN}}',
