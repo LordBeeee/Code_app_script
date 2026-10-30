@@ -33,6 +33,8 @@ const CONFIG = {
   HARD_FILE_PROTECTION_DESCRIPTION: 'KHOA_FILE_CUNG_HOP_DONG_TU_DONG',
   HARD_UPLOAD_COLUMN: 28, // AB
   HARD_LINK_COLUMN: 29,   // AC
+  APPLICATION_DATE_COLUMN: 3, // C: Ngày làm đơn
+  COMPLETION_DATE_COLUMN: 19, // S: Ngày hoàn thành công việc
   AMOUNT_COLUMN: 20,       // T: Số tiền thực nhận sau thuế
   AMOUNT_WORDS_COLUMN: 21, // U: Số tiền thực nhận sau thuế bằng chữ (tự điền)
   UPLOAD_MAX_SIZE_MB: 10
@@ -492,6 +494,31 @@ function dinhDangSoTien_(amount) {
   return String(amount).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
 }
 
+function capNhatNgayHoanThanh_(sheet, row) {
+  const ngayLamDon = String(
+    sheet.getRange(row, CONFIG.APPLICATION_DATE_COLUMN).getDisplayValue() || ''
+  ).trim();
+  const cell = sheet.getRange(row, CONFIG.COMPLETION_DATE_COLUMN);
+
+  if (!ngayLamDon) {
+    cell.clearContent();
+    return;
+  }
+
+  let parts;
+  try {
+    parts = tachNgay_(ngayLamDon);
+  } catch (error) {
+    cell.clearContent();
+    return;
+  }
+
+  const ngayHoanThanh = new Date(
+    Number(parts.nam), Number(parts.thang) - 1, Number(parts.ngay) + 20
+  );
+  cell.setNumberFormat('dd/MM/yyyy').setValue(ngayHoanThanh);
+}
+
 function xuLyTaoHopDong(e) {
   if (!e || !e.range) return;
 
@@ -500,6 +527,16 @@ function xuLyTaoHopDong(e) {
 
   if (sheet.getName() !== CONFIG.SHEET_NAME) return;
   if (!coBoCucHopDongMoi_(sheet)) return;
+
+  // Hỗ trợ sửa hoặc dán nhiều dòng có chứa cột C.
+  if (
+    range.getColumn() <= CONFIG.APPLICATION_DATE_COLUMN &&
+    range.getLastColumn() >= CONFIG.APPLICATION_DATE_COLUMN
+  ) {
+    for (let row = Math.max(2, range.getRow()); row <= range.getLastRow(); row++) {
+      capNhatNgayHoanThanh_(sheet, row);
+    }
+  }
 
   // Hỗ trợ cả khi dán nhiều dòng hoặc nhiều cột có chứa T.
   if (
@@ -614,6 +651,9 @@ function taoHopDongChoDong_(sheet, row) {
   }
 
   const ngayKy = tachNgay_(ngayLamDonHienThi);
+  capNhatNgayHoanThanh_(sheet, row);
+  displayValues[CONFIG.COMPLETION_DATE_COLUMN - 1] = sheet
+    .getRange(row, CONFIG.COMPLETION_DATE_COLUMN).getDisplayValue();
 
   const headers = [
     'Số hợp đồng',
