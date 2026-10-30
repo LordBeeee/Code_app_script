@@ -31,6 +31,8 @@ const CONFIG = {
   ACTION_COLUMN: 27,     // AA
   BBNT_ACTION_COLUMN: 28, // AB
   BBNT_SHEET_NAME: 'BBNT MẪU CÁ NHÂN',
+  // URL Web App của Code_Bien_Ban_Nghiem_Thu_Moi; dùng khi cột Z không còn nút mẫu.
+  BBNT_WEB_APP_URL: 'https://script.google.com/a/macros/getvini.com/s/AKfycbxp_ehCPWJIEmjhPaLm7gzFA-63Roi3jnI7yENdLC6XCUUG0Ous8JW8PU804BTO5bl2/exec',
   LINK_PROTECTION_DESCRIPTION: 'KHOA_LINK_HOP_DONG_TU_DONG',
   HARD_FILE_PROTECTION_DESCRIPTION: 'KHOA_FILE_CUNG_HOP_DONG_TU_DONG',
   HARD_UPLOAD_COLUMN: 29, // AC
@@ -89,6 +91,8 @@ function onOpen() {
     .createMenu('Tạo hợp đồng')
     .addItem('Cài đặt hệ thống', 'caiDatHeThong')
     .addItem('Tạo hợp đồng cho dòng đang chọn', 'taoHopDongDongDangChon')
+    .addSeparator()
+    .addItem('Khôi phục nút FILE CỨNG BBNT', 'khoiPhucNutFileCungBbnt')
     .addSeparator()
     .addItem('Tải FILE CỨNG cho dòng đang chọn', 'moTaiFileCung')
     .addToUi();
@@ -641,10 +645,7 @@ function dienBbntTuHopDong_(sheet, row) {
         .some(value => String(value || '').trim() !== '') ||
         String(bbntSheet.getRange(targetRow, 27).getDisplayValue() || '').trim() !== '';
       if (rowHasData) {
-        const uploadLink = bbntSheet.getRange('Z2').getRichTextValue();
-        const uploadUrl = uploadLink && uploadLink.getLinkUrl();
         bbntSheet.insertRowsBefore(targetRow, 1);
-        capNhatNutTaiBbntSauKhiChen_(bbntSheet, targetRow, uploadUrl);
       }
     }
     bbntSheet.getRange(targetRow, 25).insertCheckboxes(); // Y: TẠO WORD BBNT
@@ -668,32 +669,70 @@ function dienBbntTuHopDong_(sheet, row) {
     cell.setValue(value);
     filled++;
   });
+  capNhatNutTaiBbnt_(bbntSheet);
   SpreadsheetApp.flush();
   return { row: targetRow, created: matches.length === 0, filled: filled };
 }
 
-/** Các link FILE CỨNG của BBNT có tham số row cố định; cập nhật sau khi chèn dòng. */
-function capNhatNutTaiBbntSauKhiChen_(sheet, firstRow, sampleUrl) {
-  const match = String(sampleUrl || '').match(
-    /^(https:\/\/script\.google\.com\/(?:macros\/s|a\/macros\/[^/]+\/s)\/[^/?#]+\/exec)\?loai=FILE_CUNG&row=\d+$/
-  );
-  if (!match) return;
+/** Tạo lại mọi nút Z với tham số row đúng, kể cả khi Z2 đang trống. */
+function capNhatNutTaiBbnt_(sheet) {
+  if (String(sheet.getRange('Z1').getDisplayValue() || '').trim() !== 'FILE CỨNG') {
+    throw new Error('Bố cục tab BBNT chưa đúng: cột Z phải là FILE CỨNG.');
+  }
+  const maxRows = sheet.getMaxRows();
+  if (maxRows < 2) return 0;
+
+  const richValues = sheet.getRange(2, 26, maxRows - 1, 1).getRichTextValues();
+  let baseUrl = '';
+  for (const [richValue] of richValues) {
+    const url = richValue && richValue.getLinkUrl();
+    const match = String(url || '').match(
+      /^(https:\/\/script\.google\.com\/(?:macros\/s|a\/macros\/[^/]+\/s)\/[^/?#]+\/exec)\?loai=FILE_CUNG&row=\d+$/
+    );
+    if (match) {
+      baseUrl = match[1];
+      break;
+    }
+  }
+  if (!baseUrl) baseUrl = String(CONFIG.BBNT_WEB_APP_URL || '').trim();
+  if (!/^https:\/\/script\.google\.com\/(?:macros\/s|a\/macros\/[^/]+\/s)\/[^/?#]+\/exec$/.test(baseUrl)) {
+    throw new Error('Chưa có URL Web App BBNT hợp lệ để tạo nút FILE CỨNG.');
+  }
 
   const buttons = [];
-  for (let row = firstRow; row <= sheet.getMaxRows(); row++) {
+  for (let row = 2; row <= maxRows; row++) {
     buttons.push([
       SpreadsheetApp.newRichTextValue()
         .setText('⬆ TẢI FILE CỨNG')
-        .setLinkUrl(match[1] + '?loai=FILE_CUNG&row=' + row)
+        .setLinkUrl(baseUrl + '?loai=FILE_CUNG&row=' + row)
         .build()
     ]);
   }
-  sheet.getRange(firstRow, 26, buttons.length, 1)
+  sheet.getRange(2, 26, buttons.length, 1)
     .setRichTextValues(buttons)
     .setHorizontalAlignment('center')
     .setFontWeight('bold')
     .setFontColor('#1155CC')
     .setBackground('#E8F0FE');
+  return buttons.length;
+}
+
+/** Chạy qua menu để khôi phục ngay các nút BBNT đã mất. */
+function khoiPhucNutFileCungBbnt() {
+  const ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+  const sheet = ss.getSheetByName(CONFIG.BBNT_SHEET_NAME);
+  if (!sheet) throw new Error('Không tìm thấy tab ' + CONFIG.BBNT_SHEET_NAME + '.');
+  const lock = LockService.getDocumentLock() || LockService.getScriptLock();
+  if (!lock.tryLock(15000)) {
+    throw new Error('Hệ thống đang xử lý yêu cầu khác. Hãy thử lại.');
+  }
+  try {
+    const count = capNhatNutTaiBbnt_(sheet);
+    SpreadsheetApp.flush();
+    ss.toast('Đã khôi phục ' + count + ' nút FILE CỨNG ở tab BBNT.', 'Thành công', 6);
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 function columnToLetter_(column) {
