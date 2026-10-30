@@ -612,8 +612,43 @@ function dienBbntTuHopDong_(sheet, row) {
   if (matches.length > 1) {
     throw new Error('Tab BBNT có nhiều dòng cùng Số hợp đồng ' + soHopDong + '.');
   }
-  const targetRow = matches.length ? matches[0] : lastRow + 1;
-  if (targetRow > bbntSheet.getMaxRows()) bbntSheet.insertRowAfter(lastRow);
+  let targetRow;
+  if (matches.length) {
+    targetRow = matches[0];
+  } else {
+    // Chọn vị trí theo mã hợp đồng ở cột B, bỏ qua các dòng trống do
+    // checkbox và nút tải FILE CỨNG tạo ra đến tận cuối Sheet.
+    let previousRow = 1;
+    let nextRow = Infinity;
+    contractNumbers.forEach((number, index) => {
+      if (!number) return;
+      const comparison = number.localeCompare(
+        soHopDong, 'vi', { numeric: true, sensitivity: 'base' }
+      );
+      if (comparison < 0) previousRow = Math.max(previousRow, index + 2);
+      if (comparison > 0) nextRow = Math.min(nextRow, index + 2);
+    });
+    if (previousRow >= nextRow) {
+      throw new Error('Thứ tự mã hợp đồng ở cột B của tab BBNT chưa nhất quán.');
+    }
+    targetRow = previousRow + 1;
+
+    if (targetRow > bbntSheet.getMaxRows()) {
+      bbntSheet.insertRowAfter(bbntSheet.getMaxRows());
+    } else {
+      const rowHasData = bbntSheet.getRange(targetRow, 1, 1, 24)
+        .getDisplayValues()[0]
+        .some(value => String(value || '').trim() !== '') ||
+        String(bbntSheet.getRange(targetRow, 27).getDisplayValue() || '').trim() !== '';
+      if (rowHasData) {
+        const uploadLink = bbntSheet.getRange('Z2').getRichTextValue();
+        const uploadUrl = uploadLink && uploadLink.getLinkUrl();
+        bbntSheet.insertRowsBefore(targetRow, 1);
+        capNhatNutTaiBbntSauKhiChen_(bbntSheet, targetRow, uploadUrl);
+      }
+    }
+    bbntSheet.getRange(targetRow, 25).insertCheckboxes(); // Y: TẠO WORD BBNT
+  }
 
   // A:U của BBNT. Các cột đánh giá L, R, U không có dữ liệu nguồn.
   const mapped = [
@@ -635,6 +670,30 @@ function dienBbntTuHopDong_(sheet, row) {
   });
   SpreadsheetApp.flush();
   return { row: targetRow, created: matches.length === 0, filled: filled };
+}
+
+/** Các link FILE CỨNG của BBNT có tham số row cố định; cập nhật sau khi chèn dòng. */
+function capNhatNutTaiBbntSauKhiChen_(sheet, firstRow, sampleUrl) {
+  const match = String(sampleUrl || '').match(
+    /^(https:\/\/script\.google\.com\/(?:macros\/s|a\/macros\/[^/]+\/s)\/[^/?#]+\/exec)\?loai=FILE_CUNG&row=\d+$/
+  );
+  if (!match) return;
+
+  const buttons = [];
+  for (let row = firstRow; row <= sheet.getMaxRows(); row++) {
+    buttons.push([
+      SpreadsheetApp.newRichTextValue()
+        .setText('⬆ TẢI FILE CỨNG')
+        .setLinkUrl(match[1] + '?loai=FILE_CUNG&row=' + row)
+        .build()
+    ]);
+  }
+  sheet.getRange(firstRow, 26, buttons.length, 1)
+    .setRichTextValues(buttons)
+    .setHorizontalAlignment('center')
+    .setFontWeight('bold')
+    .setFontColor('#1155CC')
+    .setBackground('#E8F0FE');
 }
 
 function columnToLetter_(column) {
