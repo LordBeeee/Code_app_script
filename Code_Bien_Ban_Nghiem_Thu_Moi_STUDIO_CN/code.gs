@@ -2,38 +2,38 @@
  * TỰ ĐỘNG TẠO BIÊN BẢN NGHIỆM THU
  *
  * A   - Số Biên Bản Nghiệm Thu (tự lấy bằng cột B)
- * B:U - Dữ liệu bắt buộc
- * V:X - Link Word lần 01, 02, 03
- * Y   - Checkbox TẠO WORD
- * Z   - Tải FILE CỨNG
- * AA  - Link_FILE_Cung
+ * B:L - Dữ liệu bắt buộc
+ * M:O - Link Word lần 01, 02, 03
+ * P   - Checkbox TẠO WORD
+ * Q   - Tải FILE CỨNG
+ * R   - Link_FILE_Cung
  *
  * Tên hàm và cấu hình dùng tiền tố BBNT để không xung đột với các
  * script Hợp đồng khoán và Giấy đề nghị thanh toán trong cùng dự án.
  */
 
 const BBNT_CONFIG = {
-  SHEET_NAME: 'BBNT MẪU CÁ NHÂN',
+  SHEET_NAME: 'BBNT STUDIO CN',
 
   SPREADSHEET_URL:
-    'https://docs.google.com/spreadsheets/d/1uFp7McsEUjFQzMsQrW0ZSiqxQe7324Wy6KMzsHP_Mq0/edit?gid=1546770827#gid=1546770827',
+    'https://docs.google.com/spreadsheets/d/1uFp7McsEUjFQzMsQrW0ZSiqxQe7324Wy6KMzsHP_Mq0/edit',
 
   TEMPLATE_URL:
-    'https://docs.google.com/document/d/1iL82jXG2uqSzsr4auMIBK2evW6SuYq267UCvqpIgBcw/edit?tab=t.0',
+    'https://docs.google.com/document/d/18i8Y3PeB8wFEzbC0Yapw_UFVgg_3yJR04I7S7zDaq00/edit?tab=t.0',
 
   FOLDER_URL:
     'https://drive.google.com/drive/folders/1sP4YJ8EVSNlq2D22M_J5ST2LXDjZ9ZKv?hl=vi',
 
   // Có thể để trống: code tự lấy URL Web App đã triển khai.
-  WEB_APP_URL: 'https://script.google.com/a/macros/getvini.com/s/AKfycbxp_ehCPWJIEmjhPaLm7gzFA-63Roi3jnI7yENdLC6XCUUG0Ous8JW8PU804BTO5bl2/exec',
+  WEB_APP_URL: 'https://script.google.com/macros/library/d/14AByJdWt0ypnpW2_JHazZ-S74d8iLr4jpi0MMSxjjgHZMrOvk-cODP3B/1',
 
-  FIRST_LINK_COLUMN: 22, // V
-  LINK_COUNT: 3,         // V, W, X
-  ACTION_COLUMN: 25,     // Y
+  FIRST_LINK_COLUMN: 13, // M
+  LINK_COUNT: 3,         // M, N, O
+  ACTION_COLUMN: 16,     // P
   LINK_PROTECTION_DESCRIPTION: 'KHOA_LINK_BBNT_TU_DONG',
   HARD_FILE_PROTECTION_DESCRIPTION: 'KHOA_FILE_CUNG_BBNT_TU_DONG',
-  HARD_UPLOAD_COLUMN: 26, // Z
-  HARD_LINK_COLUMN: 27,   // AA
+  HARD_UPLOAD_COLUMN: 17, // Q
+  HARD_LINK_COLUMN: 18,   // R
   UPLOAD_MAX_SIZE_MB: 10
 };
 
@@ -197,6 +197,7 @@ function caiDatBienBanNghiemThu() {
   if (!sheet) {
     throw new Error('Không tìm thấy tab: ' + BBNT_CONFIG.SHEET_NAME);
   }
+  bbntKiemTraBoCuc_(sheet);
 
   const templateId = bbntLayIdGoogleDoc_(BBNT_CONFIG.TEMPLATE_URL);
   const folderId = bbntLayIdFolder_(BBNT_CONFIG.FOLDER_URL);
@@ -210,15 +211,14 @@ function caiDatBienBanNghiemThu() {
   DocumentApp.openById(templateId).getBody();
   DriveApp.getFolderById(folderId).getName();
 
-  bbntXoaHaiCotTrungLap_(sheet);
   sheet.getRange('A1').setValue('Số Biên Bản Nghiệm Thu');
-  sheet.getRange('V1:Y1').setValues([[
+  sheet.getRange('M1:P1').setValues([[
     'Link_Word_01',
     'Link_Word_02',
     'Link_Word_03',
     'TẠO WORD'
   ]]);
-  sheet.getRange('Z1:AA1').setValues([[
+  sheet.getRange('Q1:R1').setValues([[
     'FILE CỨNG',
     'Link_FILE_Cung'
   ]]);
@@ -257,36 +257,31 @@ function caiDatBienBanNghiemThu() {
   bbntThongBao_(
     ss,
     bbntLayUrlWebApp_()
-       ? 'Đã tạo checkbox Y và nút FILE CỨNG ở Z.'
-       : 'Đã cài biên bản. Triển khai Web App rồi chạy cài đặt lại để hiện nút Z.',
+       ? 'Đã tạo checkbox P và nút FILE CỨNG ở Q.'
+       : 'Đã cài biên bản. Triển khai Web App rồi chạy cài đặt lại để hiện nút Q.',
     'Cài đặt biên bản nghiệm thu thành công',
     7
   );
 }
 
-/**
- * Xóa hai cột cũ J:K theo tên tiêu đề. Hàm an toàn khi chạy lại:
- * nếu tiêu đề không còn tồn tại thì không xóa thêm cột nào.
- */
-function bbntXoaHaiCotTrungLap_(sheet) {
-  const lastColumn = sheet.getLastColumn();
-  const headers = sheet.getRange(1, 1, 1, lastColumn)
-    .getDisplayValues()[0]
+/** Ngăn ghi nhầm cột khi tab chưa có cấu trúc STUDIO CN. */
+function bbntCoBoCucMoi_(sheet) {
+  const headers = sheet.getRange('J1:M1').getDisplayValues()[0]
     .map(value => String(value || '').trim().toLowerCase());
-  const targets = [
-    'tên dự án',
-    'số lượng video(công việc giao khoán)'
-  ];
-  const columns = targets
-    .map(target => headers.indexOf(target) + 1)
-    .filter(column => column > 0)
-    .sort((a, b) => b - a);
+  return headers[0] === 'tên dự án' &&
+    headers[1] === 'hạng mục công việc' &&
+    headers[2] === 'đánh giá' &&
+    headers[3] === 'link_word_01';
+}
 
-  columns.forEach(column => sheet.deleteColumn(column));
+function bbntKiemTraBoCuc_(sheet) {
+  if (!bbntCoBoCucMoi_(sheet)) {
+    throw new Error('Bố cục tab BBNT STUDIO CN chưa đúng: J=Tên Dự án, K=Hạng mục công việc, L=Đánh giá, M=Link_Word_01.');
+  }
 }
 
 // ========================================
-// 2. XỬ LÝ CHECKBOX CỘT Y
+// 2. XỬ LÝ CHECKBOX CỘT P
 // ========================================
 
 function xuLyTaoBienBanNghiemThu(e) {
@@ -297,6 +292,7 @@ function xuLyTaoBienBanNghiemThu(e) {
 
   if (
     sheet.getName() !== BBNT_CONFIG.SHEET_NAME ||
+    !bbntCoBoCucMoi_(sheet) ||
     range.getColumn() !== BBNT_CONFIG.ACTION_COLUMN ||
     range.getRow() < 2 ||
     range.getNumRows() !== 1 ||
@@ -386,11 +382,12 @@ function taoBienBanNghiemThuDongDangChon() {
 // ========================================
 
 function bbntTaoTaiLieuChoDong_(sheet, row) {
-  // A:U là dữ liệu; V:X là ba link hiện có.
-  const displayValues = sheet.getRange(row, 1, 1, 24)
+  bbntKiemTraBoCuc_(sheet);
+  // A:L là dữ liệu; M:O là ba link hiện có.
+  const displayValues = sheet.getRange(
+    row, 1, 1, BBNT_CONFIG.FIRST_LINK_COLUMN + BBNT_CONFIG.LINK_COUNT - 1
+  )
     .getDisplayValues()[0];
-  const rawValues = sheet.getRange(row, 1, 1, 21)
-    .getValues()[0];
 
   const headers = [
     'Số Biên Bản Nghiệm Thu',
@@ -402,18 +399,9 @@ function bbntTaoTaiLieuChoDong_(sheet, row) {
     'Mã số thuế',
     'Địa chỉ',
     'Số điện thoại',
-    'Nội dung Kịch bản',
-    'Số lượng Kịch bản',
-    'Đánh giá Kịch bản',
-    'Số lượng Video',
-    'Khung Video',
-    'Chất lượng Video',
-    'Thời lượng Video',
-    'Hiệu ứng Video',
-    'Đánh giá Video',
-    'Nội dung Diễn Viên',
-    'Số lượng Diễn viên',
-    'Đánh giá Diễn viên'
+    'Tên Dự án',
+    'Hạng mục công việc',
+    'Đánh giá'
   ];
 
   const errorValues = [
@@ -422,7 +410,7 @@ function bbntTaoTaiLieuChoDong_(sheet, row) {
   ];
   const missing = [];
 
-  // A do code tự ghi bằng B; người dùng bắt buộc nhập đủ B:U.
+  // A do code tự ghi bằng B; người dùng bắt buộc nhập đủ B:L.
   for (let i = 1; i < headers.length; i++) {
     const value = String(displayValues[i] ?? '').trim();
 
@@ -437,31 +425,14 @@ function bbntTaoTaiLieuChoDong_(sheet, row) {
     );
   }
 
-  const links = displayValues.slice(21, 24);
+  const links = displayValues.slice(
+    BBNT_CONFIG.FIRST_LINK_COLUMN - 1,
+    BBNT_CONFIG.FIRST_LINK_COLUMN - 1 + BBNT_CONFIG.LINK_COUNT
+  );
   const emptyLinkIndex = links.findIndex(link => String(link).trim() === '');
 
   if (emptyLinkIndex === -1) {
     throw new Error('Dòng này đã tạo đủ 3 biên bản nghiệm thu.');
-  }
-
-  const positiveNumberColumns = [
-    { index: 10, name: headers[10] }, // K
-    { index: 12, name: headers[12] }, // M
-    { index: 19, name: headers[19] }  // T
-  ];
-  const invalidNumbers = positiveNumberColumns
-    .filter(item => {
-      return !bbntLaSoDuong_(
-        rawValues[item.index],
-        displayValues[item.index]
-      );
-    })
-    .map(item => item.name);
-
-  if (invalidNumbers.length > 0) {
-    throw new Error(
-      'Các trường phải là số lớn hơn 0: ' + invalidNumbers.join(', ')
-    );
   }
 
   const [
@@ -474,18 +445,9 @@ function bbntTaoTaiLieuChoDong_(sheet, row) {
     maSoThue,
     diaChi,
     soDienThoai,
-    noiDungKichBan,
-    soLuongKichBan,
-    danhGiaKichBan,
-    soLuongVideo,
-    khungVideo,
-    chatLuongVideo,
-    thoiLuongVideo,
-    hieuUngVideo,
-    danhGiaVideo,
-    noiDungDienVien,
-    soLuongDienVien,
-    danhGiaDienVien
+    tenDuAn,
+    hangMucCongViec,
+    danhGia
   ] = displayValues;
 
   const ngayKyParts = bbntTachNgay_(kyNgay);
@@ -494,7 +456,7 @@ function bbntTaoTaiLieuChoDong_(sheet, row) {
   const lanTao = String(emptyLinkIndex + 1).padStart(2, '0');
   const targetLinkColumn = BBNT_CONFIG.FIRST_LINK_COLUMN + emptyLinkIndex;
 
-  // Chỉ ghi A sau khi toàn bộ B:U đã vượt qua kiểm tra.
+  // Chỉ ghi A sau khi toàn bộ B:L đã vượt qua kiểm tra.
   sheet.getRange(row, 1)
     .setNumberFormat('@')
     .setValue(soBienBan);
@@ -505,7 +467,7 @@ function bbntTaoTaiLieuChoDong_(sheet, row) {
   const mainFolder = DriveApp.getFolderById(folderId);
   const targetFolder = bbntLayHoacTaoThuMuc_(mainFolder, soHopDong);
   const fileName = bbntLamSachTenFile_(
-    soBienBan + ' - ' + hoTen + ' - BBNT HĐ khoán việc - ' + lanTao
+    soBienBan + ' - ' + hoTen + ' - BBNT STUDIO CN - ' + lanTao
   );
   const copy = template.makeCopy(fileName, targetFolder);
 
@@ -531,21 +493,9 @@ function bbntTaoTaiLieuChoDong_(sheet, row) {
       '{{MA_SO_THUE}}': maSoThue,
       '{{DIA_CHI}}': diaChi,
       '{{SO_DIEN_THOAI}}': soDienThoai,
-      // Tương thích mẫu cũ sau khi bỏ hai cột J:K.
-      '{{TEN_DU_AN}}': '',
-      '{{SO_LUONG_CONG_VIEC}}': soLuongVideo,
-      '{{NOI_DUNG_KICH_BAN}}': noiDungKichBan,
-      '{{SO_LUONG_KICH_BAN}}': soLuongKichBan,
-      '{{DANH_GIA_KICH_BAN}}': danhGiaKichBan,
-      '{{SO_LUONG_VIDEO}}': soLuongVideo,
-      '{{KHUNG_VIDEO}}': khungVideo,
-      '{{CHAT_LUONG_VIDEO}}': chatLuongVideo,
-      '{{THOI_LUONG_VIDEO}}': thoiLuongVideo,
-      '{{HIEU_UNG_VIDEO}}': hieuUngVideo,
-      '{{DANH_GIA_VIDEO}}': danhGiaVideo,
-      '{{NOI_DUNG_DIEN_VIEN}}': noiDungDienVien,
-      '{{SO_LUONG_DIEN_VIEN}}': soLuongDienVien,
-      '{{DANH_GIA_DIEN_VIEN}}': danhGiaDienVien
+      '{{TEN_DU_AN}}': tenDuAn,
+      '{{HANG_MUC_CONG_VIEC}}': hangMucCongViec,
+      '{{DANH_GIA}}': danhGia
     };
 
     bbntThayBienTrongTaiLieu_(doc, replacements);
@@ -599,29 +549,6 @@ function bbntLaySpreadsheet_() {
   }
 
   return SpreadsheetApp.openByUrl(BBNT_CONFIG.SPREADSHEET_URL);
-}
-
-/** Chấp nhận số thật hoặc chuỗi số do công thức/Sheet trả về. */
-function bbntLaSoDuong_(rawValue, displayValue) {
-  if (typeof rawValue === 'number') {
-    return Number.isFinite(rawValue) && rawValue > 0;
-  }
-
-  const text = String(
-    rawValue !== '' && rawValue !== null && rawValue !== undefined
-      ? rawValue
-      : displayValue
-  )
-    .trim()
-    .replace(/\s+/g, '')
-    .replace(',', '.');
-
-  if (!/^\d+(?:\.\d+)?$/.test(text)) {
-    return false;
-  }
-
-  const number = Number(text);
-  return Number.isFinite(number) && number > 0;
 }
 
 /**
@@ -717,7 +644,7 @@ function bbntLayIdFolder_(urlOrId) {
 }
 
 function bbntLayHoacTaoThuMuc_(parentFolder, soHopDong) {
-  const folderName = bbntLamSachTenFile_(soHopDong);
+  const folderName = 'STUDIO CN - ' + bbntLamSachTenFile_(soHopDong);
   const folders = parentFolder.getFoldersByName(folderName);
 
   return folders.hasNext()
@@ -792,16 +719,7 @@ const BBNT_TEMPLATE_FIELDS = [
   '{{MA_SO_THUE}}',
   '{{DIA_CHI}}',
   '{{SO_DIEN_THOAI}}',
-  '{{NOI_DUNG_KICH_BAN}}',
-  '{{SO_LUONG_KICH_BAN}}',
-  '{{DANH_GIA_KICH_BAN}}',
-  '{{SO_LUONG_VIDEO}}',
-  '{{KHUNG_VIDEO}}',
-  '{{CHAT_LUONG_VIDEO}}',
-  '{{THOI_LUONG_VIDEO}}',
-  '{{HIEU_UNG_VIDEO}}',
-  '{{DANH_GIA_VIDEO}}',
-  '{{NOI_DUNG_DIEN_VIEN}}',
-  '{{SO_LUONG_DIEN_VIEN}}',
-  '{{DANH_GIA_DIEN_VIEN}}'
+  '{{TEN_DU_AN}}',
+  '{{HANG_MUC_CONG_VIEC}}',
+  '{{DANH_GIA}}'
 ];
