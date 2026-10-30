@@ -15,6 +15,7 @@
 
 const CONFIG = {
   SHEET_NAME: 'HỢP ĐỒNG KHOÁN MẪU và BBNT CÁ NHÂN',
+  STUDIO_SHEET_NAME: 'HỢP ĐỒNG KHOÁN và BBNT STUDIO CN',
   LEGACY_BBNT_SHEET_NAME: 'BBNT MẪU CÁ NHÂN',
   SPREADSHEET_ID: '1uFp7McsEUjFQzMsQrW0ZSiqxQe7324Wy6KMzsHP_Mq0',
 
@@ -91,6 +92,33 @@ function doGet(e) {
     .setTitle('Tải tệp - FILE CỨNG - Dòng ' + row);
 }
 
+/** Web App dùng riêng cho dự án STUDIO CN xin mã hợp đồng chung. */
+function doPost(e) {
+  try {
+    const payload = JSON.parse(String(e && e.postData && e.postData.contents || '{}'));
+    const token = PropertiesService.getScriptProperties()
+      .getProperty('SHARED_CONTRACT_NUMBER_TOKEN');
+    if (!token || !payload.token || payload.token !== token) {
+      throw new Error('Không có quyền yêu cầu cấp số hợp đồng.');
+    }
+    if (payload.action === 'ping') {
+      return traKetQuaCapSo_({ ok: true, ready: true });
+    }
+    if (payload.action !== 'allocate') {
+      throw new Error('Yêu cầu cấp số không hợp lệ.');
+    }
+    const number = taoSoHopDongMoi_(payload.sheetName, Number(payload.row));
+    return traKetQuaCapSo_({ ok: true, number: number });
+  } catch (error) {
+    return traKetQuaCapSo_({ ok: false, error: error.message });
+  }
+}
+
+function traKetQuaCapSo_(result) {
+  return ContentService.createTextOutput(JSON.stringify(result))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
 
 // ========================================
 // 1. MENU VÀ CÀI ĐẶT HỆ THỐNG
@@ -100,6 +128,8 @@ function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu('Tạo hợp đồng')
     .addItem('Cài đặt hệ thống', 'caiDatHeThong')
+    .addItem('Lấy khóa cấp số chung', 'hienThiKhoaCapSoChung')
+    .addItem('Kiểm tra mã hợp đồng trùng', 'kiemTraMaHopDongTrung')
     .addItem('Tạo hợp đồng cho dòng đang chọn', 'taoHopDongDongDangChon')
     .addItem('Tạo BBNT cho dòng đang chọn', 'taoBbntDongDangChon')
     .addSeparator()
@@ -121,7 +151,8 @@ function caiDatHeThong() {
   if (!sheet) {
     throw new Error('Không tìm thấy tab: ' + CONFIG.SHEET_NAME);
   }
-  kiemTraBoCucHopDong_(sheet);
+  // A1 được điền ở xoaCongThucSttCu_ sau khi kiểm tra quyền truy cập.
+  kiemTraBoCucHopDong_(sheet, true);
 
   const templateId = layIdGoogleDoc_(CONFIG.TEMPLATE_URL);
   const template = DriveApp.getFileById(templateId);
@@ -229,9 +260,22 @@ function coBoCucHopDongMoi_(sheet) {
   });
 }
 
-function kiemTraBoCucHopDong_(sheet) {
-  if (!coBoCucHopDongMoi_(sheet)) {
-    throw new Error('Bố cục tab gộp A:AO chưa đúng với danh sách cột đã thống nhất.');
+function kiemTraBoCucHopDong_(sheet, choPhepA1Trong) {
+  const headers = sheet.getRange(1, 1, 1, MERGED_HEADERS.length).getDisplayValues()[0];
+  const saiLech = [];
+
+  MERGED_HEADERS.forEach((expected, index) => {
+    const actual = chuanHoaTieuDe_(headers[index]);
+    if (index === 0 && choPhepA1Trong && !actual) return;
+    if (actual === chuanHoaTieuDe_(expected) ||
+        (index === 9 && actual === chuanHoaTieuDe_('Nội dung Kịch bản'))) return;
+
+    saiLech.push(cotThanhChu_(index + 1) + '1: hiện là "' +
+      (headers[index] || '(trống)') + '", cần "' + expected + '"');
+  });
+
+  if (saiLech.length) {
+    throw new Error('Bố cục tab gộp A:AO chưa đúng: ' + saiLech.join('; '));
   }
 }
 
@@ -619,7 +663,8 @@ function xuLyTaoHopDong(e) {
   const row = range.getRow();
   const isBbnt = range.getColumn() === CONFIG.BBNT_ACTION_COLUMN;
   const title = isBbnt ? 'BBNT' : 'hợp đồng';
-  const lock = LockService.getDocumentLock() || LockService.getScriptLock();
+  const documentLock = LockService.getDocumentLock();
+  const lock = documentLock || LockService.getScriptLock();
 
   if (!lock.tryLock(15000)) {
     actionCell.setValue(false);
@@ -629,7 +674,8 @@ function xuLyTaoHopDong(e) {
 
   try {
     actionCell.setNote('Đang tạo ' + title + '...');
-    const result = isBbnt ? taoBbntChoDong_(sheet, row) : taoHopDongChoDong_(sheet, row);
+    const result = isBbnt ? taoBbntChoDong_(sheet, row)
+      : taoHopDongChoDong_(sheet, row, !documentLock);
 
     actionCell.setNote(
       'Đã tạo ' + title + ' lần ' + result.lanTao + ': ' + result.url
@@ -670,14 +716,15 @@ function taoHopDongDongDangChon() {
     throw new Error('Hãy chọn một ô trong dòng dữ liệu cần tạo hợp đồng.');
   }
 
-  const lock = LockService.getDocumentLock() || LockService.getScriptLock();
+  const documentLock = LockService.getDocumentLock();
+  const lock = documentLock || LockService.getScriptLock();
 
   if (!lock.tryLock(15000)) {
     throw new Error('Hệ thống đang xử lý yêu cầu khác. Hãy thử lại.');
   }
 
   try {
-    const result = taoHopDongChoDong_(sheet, row);
+    const result = taoHopDongChoDong_(sheet, row, !documentLock);
 
     ss.toast(
       'Đã tạo hợp đồng lần ' + result.lanTao + ' cho dòng ' + row,
@@ -712,7 +759,7 @@ function taoBbntDongDangChon() {
 // 3. ĐỌC DỮ LIỆU VÀ TẠO HỢP ĐỒNG
 // ========================================
 
-function taoHopDongChoDong_(sheet, row) {
+function taoHopDongChoDong_(sheet, row, numberLockHeld) {
   kiemTraBoCucHopDong_(sheet);
   xoaCongThucSttCu_(sheet);
 
@@ -793,7 +840,6 @@ function taoHopDongChoDong_(sheet, row) {
     CONFIG.FIRST_LINK_COLUMN - 1 + CONFIG.LINK_COUNT
   );
   const emptyLinkIndex = links.findIndex(link => String(link).trim() === '');
-  const currentRowHasLink = links.some(link => String(link).trim() !== '');
 
   if (emptyLinkIndex === -1) {
     throw new Error('Dòng này đã tạo đủ 3 hợp đồng.');
@@ -801,18 +847,8 @@ function taoHopDongChoDong_(sheet, row) {
 
   // Kiểm tra ngày hoàn thành trước khi cấp số hợp đồng.
   const ngayHoanTat = tachNgay_(displayValues[18]);
-  let soHopDong = String(displayValues[0] || '').trim();
-
-  // Giữ số đã dùng trong Word của dòng này, kể cả số theo định dạng cũ.
-  // Dòng chưa có link luôn được cấp số từ các hợp đồng đã tạo.
-  if (!currentRowHasLink || !soHopDong) {
-    soHopDong = taoSoHopDongMoi_(sheet, row);
-    sheet.getRange(row, 1)
-      .setNumberFormat('@')
-      .setValue(soHopDong);
-    displayValues[0] = soHopDong;
-    SpreadsheetApp.flush();
-  }
+  const soHopDong = taoSoHopDongMoi_(CONFIG.SHEET_NAME, row, numberLockHeld);
+  displayValues[0] = soHopDong;
 
   const [
     stt,
@@ -1172,37 +1208,105 @@ function chuyenDuLieuBbntCu() {
 // 4. SINH SỐ HỢP ĐỒNG
 // ========================================
 
-/**
- * Cấp số nguyên liên tiếp từ 3000.
- * Chỉ các dòng có ít nhất một link Word tại X:Z mới được tính.
- */
-function taoSoHopDongMoi_(sheet, currentRow) {
-  const lastRow = Math.max(sheet.getLastRow(), 2);
-  const existingRows = sheet.getRange(
-    2, 1, lastRow - 1, CONFIG.FIRST_LINK_COLUMN + CONFIG.LINK_COUNT - 1
-  )
-    .getDisplayValues();
-  let maxSequence = 2999;
-
-  existingRows.forEach((values, index) => {
-    const sheetRow = index + 2;
-
-    if (sheetRow === currentRow) return;
-
-    const hasWordLink = values
-      .slice(CONFIG.FIRST_LINK_COLUMN - 1, CONFIG.FIRST_LINK_COLUMN - 1 + CONFIG.LINK_COUNT)
-      .some(link => String(link || '').trim() !== '');
-
-    if (!hasWordLink) return;
-
-    const soHopDong = String(values[0] || '').trim();
-
-    if (/^\d+$/.test(soHopDong)) {
-      maxSequence = Math.max(maxSequence, Number(soHopDong));
+/** Tất cả yêu cầu cấp mã của hai dự án đi qua khóa của dự án cá nhân này. */
+function taoSoHopDongMoi_(sheetName, currentRow, lockAlreadyHeld) {
+  if (![CONFIG.SHEET_NAME, CONFIG.STUDIO_SHEET_NAME].includes(sheetName) ||
+      !Number.isInteger(currentRow) || currentRow < 2) {
+    throw new Error('Tab hoặc dòng cấp số không hợp lệ.');
+  }
+  const lock = lockAlreadyHeld ? null : LockService.getScriptLock();
+  if (lock) lock.waitLock(30000);
+  try {
+    const ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+    const targetSheet = ss.getSheetByName(sheetName);
+    if (!targetSheet || currentRow > targetSheet.getMaxRows()) {
+      throw new Error('Không tìm thấy dòng cần cấp số hợp đồng.');
     }
-  });
+    const entries = layMaHopDongHaiTab_(ss);
+    const cell = targetSheet.getRange(currentRow, 1);
+    const existing = String(cell.getDisplayValue() || '').trim();
+    if (existing) {
+      if (!/^\d+$/.test(existing) || Number(existing) < 3000) {
+        throw new Error('Số hợp đồng đang có ở cột A không hợp lệ: ' + existing);
+      }
+      const duplicate = entries.some(item => item.code === existing &&
+        (item.sheetName !== sheetName || item.row !== currentRow));
+      const firstLinkColumn = sheetName === CONFIG.SHEET_NAME
+        ? CONFIG.FIRST_LINK_COLUMN : 15; // O:Q của STUDIO CN
+      const hasWordLink = targetSheet.getRange(currentRow, firstLinkColumn, 1, 3)
+        .getDisplayValues()[0].some(value => String(value || '').trim());
+      if (duplicate && !hasWordLink) {
+        throw new Error('Mã ' + existing + ' đã dùng ở dòng khác. Hãy kiểm tra trước khi tạo Word.');
+      }
+      return existing; // Các bản Word tiếp theo và mã đã cấp nhưng tạo Word lỗi.
+    }
 
-  return String(maxSequence + 1);
+    let maxNumber = 2999;
+    entries.forEach(item => {
+      if (/^\d+$/.test(item.code)) {
+        const number = Number(item.code);
+        if (Number.isSafeInteger(number)) maxNumber = Math.max(maxNumber, number);
+      }
+    });
+    if (!Number.isSafeInteger(maxNumber + 1)) {
+      throw new Error('Đã vượt giới hạn số hợp đồng an toàn.');
+    }
+    const next = String(maxNumber + 1);
+    cell.setNumberFormat('@').setValue(next);
+    SpreadsheetApp.flush(); // Ghi mã trước khi nhả khóa cho yêu cầu từ tab còn lại.
+    return next;
+  } finally {
+    if (lock) lock.releaseLock();
+  }
+}
+
+function layMaHopDongHaiTab_(ss) {
+  const entries = [];
+  [CONFIG.SHEET_NAME, CONFIG.STUDIO_SHEET_NAME].forEach(sheetName => {
+    const sheet = ss.getSheetByName(sheetName);
+    if (!sheet) throw new Error('Không tìm thấy tab: ' + sheetName);
+    const lastRow = sheet.getLastRow();
+    if (lastRow < 2) return;
+    sheet.getRange(2, 1, lastRow - 1, 1).getDisplayValues()
+      .forEach((item, index) => {
+        const code = String(item[0] || '').trim();
+        if (code) entries.push({ code: code, sheetName: sheetName, row: index + 2 });
+      });
+  });
+  return entries;
+}
+
+function hienThiKhoaCapSoChung() {
+  const ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+  if (layEmailNguoiDung_() !== layEmailChuSoHuu_(ss)) {
+    throw new Error('Chỉ chủ sở hữu bảng tính được xem khóa cấp số chung.');
+  }
+  const properties = PropertiesService.getScriptProperties();
+  let token = properties.getProperty('SHARED_CONTRACT_NUMBER_TOKEN');
+  if (!token) {
+    token = Utilities.getUuid().replace(/-/g, '') + Utilities.getUuid().replace(/-/g, '');
+    properties.setProperty('SHARED_CONTRACT_NUMBER_TOKEN', token);
+  }
+  SpreadsheetApp.getUi().alert(
+    'Sao chép khóa này vào menu Cài kết nối cấp số chung của STUDIO CN:\n' + token
+  );
+}
+
+function kiemTraMaHopDongTrung() {
+  const ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+  const byCode = new Map();
+  layMaHopDongHaiTab_(ss).forEach(item => {
+    if (!byCode.has(item.code)) byCode.set(item.code, []);
+    byCode.get(item.code).push(item.sheetName + ' dòng ' + item.row);
+  });
+  const duplicates = [...byCode.entries()]
+    .filter(([, locations]) => locations.length > 1)
+    .map(([code, locations]) => code + ': ' + locations.join(' | '));
+  const message = duplicates.length
+    ? 'Mã trùng hiện có:\n' + duplicates.slice(0, 20).join('\n')
+    : 'Không có mã hợp đồng trùng giữa hai tab.';
+  SpreadsheetApp.getUi().alert(message);
+  return duplicates;
 }
 
 /** Chỉ xóa công thức ARRAYFORMULA tạo STT cũ; không xóa số hợp đồng đã tạo. */

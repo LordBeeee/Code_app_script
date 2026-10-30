@@ -30,6 +30,7 @@ const CONFIG = {
 
   // Để trống để dùng URL Web App của chính dự án STUDIO CN sau khi triển khai.
   WEB_APP_URL: 'https://script.google.com/a/macros/getvini.com/s/AKfycbypX-CAZ3ykjnUJ62SLbUh0Eq5Li9OBeQm-ExZ_DJP9PwMDNw7_Bq8FjwzWDzo5gIUC/exec',
+  CENTRAL_NUMBER_URL: 'https://script.google.com/a/macros/getvini.com/s/AKfycbwkG4U2MgM9aywiEcV7yKikOko-Wh0VRqE9OXGg3QC292L9AAxZ3u1mzb9UVrbDERO2hg/exec',
 
   FIRST_LINK_COLUMN: 15, // O
   LINK_COUNT: 3,         // O, P, Q
@@ -98,6 +99,8 @@ function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu('Tạo hợp đồng')
     .addItem('Cài đặt hệ thống', 'caiDatHeThong')
+    .addItem('Cài kết nối cấp số chung', 'caiDatKetNoiCapSoChung')
+    .addItem('Kiểm tra kết nối cấp số chung', 'kiemTraKetNoiCapSoChung')
     .addItem('Tạo hợp đồng cho dòng đang chọn', 'taoHopDongDongDangChon')
     .addItem('Tạo BBNT cho dòng đang chọn', 'taoBbntDongDangChon')
     .addSeparator()
@@ -760,7 +763,6 @@ function taoHopDongChoDong_(sheet, row) {
     CONFIG.FIRST_LINK_COLUMN - 1 + CONFIG.LINK_COUNT
   );
   const emptyLinkIndex = links.findIndex(link => String(link).trim() === '');
-  const currentRowHasLink = links.some(link => String(link).trim() !== '');
 
   if (emptyLinkIndex === -1) {
     throw new Error('Dòng này đã tạo đủ 3 hợp đồng.');
@@ -768,18 +770,8 @@ function taoHopDongChoDong_(sheet, row) {
 
   // Kiểm tra ngày hoàn thành trước khi cấp số hợp đồng.
   const ngayHoanTat = tachNgay_(displayValues[9]);
-  let soHopDong = String(displayValues[0] || '').trim();
-
-  // Giữ số đã dùng trong Word của dòng này, kể cả số theo định dạng cũ.
-  // Dòng chưa có link luôn được cấp số từ các hợp đồng đã tạo.
-  if (!currentRowHasLink || !soHopDong) {
-    soHopDong = taoSoHopDongMoi_(sheet, row);
-    sheet.getRange(row, 1)
-      .setNumberFormat('@')
-      .setValue(soHopDong);
-    displayValues[0] = soHopDong;
-    SpreadsheetApp.flush();
-  }
+  const soHopDong = taoSoHopDongMoi_(sheet, row);
+  displayValues[0] = soHopDong;
 
   const [
     stt,
@@ -1073,37 +1065,75 @@ function chuyenDuLieuBbntCu() {
 // 4. SINH SỐ HỢP ĐỒNG
 // ========================================
 
-/**
- * Cấp số nguyên liên tiếp từ 3000.
- * Chỉ các dòng có ít nhất một link Word tại O:Q mới được tính.
- */
+/** Gọi Web App của dự án cá nhân để cấp/kiểm tra mã dưới cùng một khóa. */
 function taoSoHopDongMoi_(sheet, currentRow) {
-  const lastRow = Math.max(sheet.getLastRow(), 2);
-  const existingRows = sheet.getRange(
-    2, 1, lastRow - 1, CONFIG.FIRST_LINK_COLUMN + CONFIG.LINK_COUNT - 1
-  )
-    .getDisplayValues();
-  let maxSequence = 2999;
+  const result = goiDichVuCapSoChung_('allocate', sheet.getName(), currentRow);
+  const number = String(result.number || '').trim();
+  if (!/^\d+$/.test(number)) throw new Error('Dịch vụ cấp số chung trả mã không hợp lệ.');
+  return number;
+}
 
-  existingRows.forEach((values, index) => {
-    const sheetRow = index + 2;
+function goiDichVuCapSoChung_(action, sheetName, row) {
+  const token = PropertiesService.getScriptProperties()
+    .getProperty('SHARED_CONTRACT_NUMBER_TOKEN');
+  if (!token) {
+    throw new Error('Chưa cài khóa cấp số chung. Hãy dùng menu Cài kết nối cấp số chung.');
+  }
+  const url = String(CONFIG.CENTRAL_NUMBER_URL || '').trim();
+  if (!/^https:\/\/script\.google\.com\/(?:macros\/s|a\/macros\/[^/]+\/s)\/[^/?#]+\/exec$/.test(url)) {
+    throw new Error('CENTRAL_NUMBER_URL chưa phải URL Web App hợp lệ.');
+  }
+  let response;
+  try {
+    response = UrlFetchApp.fetch(url, {
+      method: 'post',
+      contentType: 'application/json',
+      payload: JSON.stringify({
+        action: action, token: token,
+        sheetName: sheetName, row: row
+      }),
+      muteHttpExceptions: true,
+      followRedirects: true,
+      timeoutSeconds: 30
+    });
+  } catch (error) {
+    throw new Error('Không gọi được dịch vụ cấp số chung: ' + error.message);
+  }
+  let result;
+  try {
+    result = JSON.parse(response.getContentText());
+  } catch (error) {
+    throw new Error('Dịch vụ cấp số chung chưa trả JSON. Kiểm tra triển khai Web App và quyền truy cập.');
+  }
+  if (!result.ok) throw new Error(result.error || 'Dịch vụ cấp số chung từ chối yêu cầu.');
+  return result;
+}
 
-    if (sheetRow === currentRow) return;
+function kiemTraKetNoiCapSoChung() {
+  const result = goiDichVuCapSoChung_('ping', CONFIG.SHEET_NAME, 0);
+  if (!result.ready) throw new Error('Dịch vụ cấp số chung chưa sẵn sàng.');
+  SpreadsheetApp.getUi().alert('Kết nối cấp số chung đã sẵn sàng.');
+}
 
-    const hasWordLink = values
-      .slice(CONFIG.FIRST_LINK_COLUMN - 1, CONFIG.FIRST_LINK_COLUMN - 1 + CONFIG.LINK_COUNT)
-      .some(link => String(link || '').trim() !== '');
-
-    if (!hasWordLink) return;
-
-    const soHopDong = String(values[0] || '').trim();
-
-    if (/^\d+$/.test(soHopDong)) {
-      maxSequence = Math.max(maxSequence, Number(soHopDong));
-    }
-  });
-
-  return String(maxSequence + 1);
+function caiDatKetNoiCapSoChung() {
+  const ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+  if (layEmailNguoiDung_() !== layEmailChuSoHuu_(ss)) {
+    throw new Error('Chỉ chủ sở hữu bảng tính được cài kết nối cấp số chung.');
+  }
+  const ui = SpreadsheetApp.getUi();
+  const answer = ui.prompt(
+    'Cài kết nối cấp số chung',
+    'Dán khóa lấy từ menu Lấy khóa cấp số chung của dự án cá nhân:',
+    ui.ButtonSet.OK_CANCEL
+  );
+  if (answer.getSelectedButton() !== ui.Button.OK) return;
+  const token = String(answer.getResponseText() || '').trim();
+  if (!/^[a-fA-F0-9]{64}$/.test(token)) {
+    throw new Error('Khóa cấp số chung phải gồm 64 ký tự hex.');
+  }
+  PropertiesService.getScriptProperties()
+    .setProperty('SHARED_CONTRACT_NUMBER_TOKEN', token);
+  ui.alert('Đã lưu khóa. Hãy cập nhật triển khai Web App dự án cá nhân trước khi tạo Word.');
 }
 
 /** Chỉ xóa công thức ARRAYFORMULA tạo STT cũ; không xóa số hợp đồng đã tạo. */
