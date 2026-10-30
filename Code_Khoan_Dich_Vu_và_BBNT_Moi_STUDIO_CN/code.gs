@@ -1112,7 +1112,14 @@ function goiDichVuCapSoChung_(action, sheetName, row) {
 function kiemTraKetNoiCapSoChung() {
   const result = goiDichVuCapSoChung_('ping', CONFIG.SHEET_NAME, 0);
   if (!result.ready) throw new Error('Dịch vụ cấp số chung chưa sẵn sàng.');
-  SpreadsheetApp.getUi().alert('Kết nối cấp số chung đã sẵn sàng.');
+  const message = 'Kết nối cấp số chung đã sẵn sàng.';
+  try {
+    SpreadsheetApp.getUi().alert(message);
+  } catch (error) {
+    if (!/Cannot call SpreadsheetApp\.getUi\(\) from this context/.test(String(error))) throw error;
+    Logger.log(message);
+  }
+  return true;
 }
 
 function caiDatKetNoiCapSoChung() {
@@ -1120,7 +1127,14 @@ function caiDatKetNoiCapSoChung() {
   if (layEmailNguoiDung_() !== layEmailChuSoHuu_(ss)) {
     throw new Error('Chỉ chủ sở hữu bảng tính được cài kết nối cấp số chung.');
   }
-  const ui = SpreadsheetApp.getUi();
+  let ui;
+  try {
+    ui = SpreadsheetApp.getUi();
+  } catch (error) {
+    if (!/Cannot call SpreadsheetApp\.getUi\(\) from this context/.test(String(error))) throw error;
+    throw new Error('Dự án Apps Script độc lập: vào Cài đặt dự án > Thuộc tính tập lệnh, ' +
+      'thêm SHARED_CONTRACT_NUMBER_TOKEN và dán khóa lấy từ dự án cá nhân.');
+  }
   const answer = ui.prompt(
     'Cài kết nối cấp số chung',
     'Dán khóa lấy từ menu Lấy khóa cấp số chung của dự án cá nhân:',

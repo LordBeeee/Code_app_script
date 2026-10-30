@@ -1287,9 +1287,15 @@ function hienThiKhoaCapSoChung() {
     token = Utilities.getUuid().replace(/-/g, '') + Utilities.getUuid().replace(/-/g, '');
     properties.setProperty('SHARED_CONTRACT_NUMBER_TOKEN', token);
   }
-  SpreadsheetApp.getUi().alert(
-    'Sao chép khóa này vào menu Cài kết nối cấp số chung của STUDIO CN:\n' + token
-  );
+  const message = 'Khóa cấp số chung (dán vào Script Properties của STUDIO CN, tên ' +
+    'SHARED_CONTRACT_NUMBER_TOKEN):\n' + token;
+  try {
+    SpreadsheetApp.getUi().alert(message);
+  } catch (error) {
+    if (!/Cannot call SpreadsheetApp\.getUi\(\) from this context/.test(String(error))) throw error;
+    Logger.log(message);
+  }
+  return token;
 }
 
 function kiemTraMaHopDongTrung() {
