@@ -3,12 +3,11 @@
  *
  * A:X - Dữ liệu hợp đồng (đã xóa cột Tên Brand; W là Số Tài khoản, X là Mở Tại)
  * Y:AB - Link Word và nút tạo hợp đồng khoán
- * AC - PIC (theo dõi nội bộ)
- * AD:AE - FILE CỨNG hợp đồng khoán
- * AF:AH - Đánh giá kịch bản, video, diễn viên
- * AI:AL - Link Word và nút tạo BBNT
- * AM:AN - FILE CỨNG BBNT
- * AO:AQ - Các cột nghiệp vụ khác
+ * AC:AD - FILE CỨNG hợp đồng khoán
+ * AE:AG - Đánh giá kịch bản, video, diễn viên
+ * AH:AK - Link Word và nút tạo BBNT
+ * AL:AM - FILE CỨNG BBNT
+ * AN:AP - Các cột nghiệp vụ khác
  *
  * Đặt các biến {{...}} trong Google Docs mẫu theo TEMPLATE_FIELDS ở cuối file.
  * Riêng các số mẫu ở mục 3.2–3.3 được đổi thành biến trên bản sao hợp đồng.
@@ -36,13 +35,13 @@ const CONFIG = {
   FIRST_LINK_COLUMN: 25, // Y
   LINK_COUNT: 3,         // Y, Z, AA
   ACTION_COLUMN: 28, // AB
-  HARD_UPLOAD_COLUMN: 30, // AD
-  HARD_LINK_COLUMN: 31, // AE
-  BBNT_EVALUATION_COLUMNS: [32, 33, 34], // AF:AH
-  BBNT_FIRST_LINK_COLUMN: 35, // AI
-  BBNT_ACTION_COLUMN: 38, // AL
-  BBNT_HARD_UPLOAD_COLUMN: 39, // AM
-  BBNT_HARD_LINK_COLUMN: 40, // AN
+  HARD_UPLOAD_COLUMN: 29, // AC
+  HARD_LINK_COLUMN: 30, // AD
+  BBNT_EVALUATION_COLUMNS: [31, 32, 33], // AE:AG
+  BBNT_FIRST_LINK_COLUMN: 34, // AH
+  BBNT_ACTION_COLUMN: 37, // AK
+  BBNT_HARD_UPLOAD_COLUMN: 38, // AL
+  BBNT_HARD_LINK_COLUMN: 39, // AM
   LINK_PROTECTION_DESCRIPTION: 'KHOA_LINK_HOP_DONG_TU_DONG',
   BBNT_LINK_PROTECTION_DESCRIPTION: 'KHOA_LINK_BBNT_GOP_TU_DONG',
   HARD_FILE_PROTECTION_DESCRIPTION: 'KHOA_FILE_CUNG_HOP_DONG_TU_DONG',
@@ -144,7 +143,7 @@ function onOpen() {
 
 /**
  * Chạy hàm này đúng một lần sau khi dán code.
- * Kiểm tra bố cục A:AQ, cài hai nút tạo Word và hai nút FILE CỨNG.
+ * Kiểm tra bố cục A:AP, cài hai nút tạo Word và hai nút FILE CỨNG.
  */
 function caiDatHeThong() {
   const ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
@@ -220,8 +219,8 @@ function caiDatHeThong() {
 
   ss.toast(
     coLinkWebAppHopLe_()
-      ? 'Đã tạo nút Word AB/AL và FILE CỨNG AD/AM.'
-      : 'Đã cài Word. Hãy triển khai Web App và điền WEB_APP_URL để tạo nút AD/AM.',
+      ? 'Đã tạo nút Word AB/AK và FILE CỨNG AC/AL.'
+      : 'Đã cài Word. Hãy triển khai Web App và điền WEB_APP_URL để tạo nút AC/AL.',
     'Cài đặt thành công',
     8
   );
@@ -241,7 +240,7 @@ const MERGED_HEADERS = [
   'Ngày hoàn thành công việc', 'Số tiền thực nhận sau thuế',
   'Số tiền thực nhận sau thuế(Bằng chữ)', 'Số Tài khoản', 'Mở Tại',
   'Link_Word_01_Khoan', 'Link_Word_02_Khoan', 'Link_Word_03_Khoan',
-  'TẠO WORD_Khoan', 'PIC', 'FILE CỨNG_Khoan', 'Link_FILE_Cung_Khoan',
+  'TẠO WORD_Khoan', 'FILE CỨNG_Khoan', 'Link_FILE_Cung_Khoan',
   'Đánh giá Kịch bản', 'Đánh giá Video', 'Đánh giá Diễn viên',
   'Link_Word_01_BBNT', 'Link_Word_02_BBNT', 'Link_Word_03_BBNT',
   'TẠO WORD_BBNT', 'FILE CỨNG_BBNT', 'Link_FILE_Cung_BBNT',
@@ -277,7 +276,7 @@ function kiemTraBoCucHopDong_(sheet, choPhepA1Trong) {
   });
 
   if (saiLech.length) {
-    throw new Error('Bố cục tab gộp A:AQ chưa đúng: ' + saiLech.join('; '));
+    throw new Error('Bố cục tab gộp A:AP chưa đúng: ' + saiLech.join('; '));
   }
 }
 
@@ -626,7 +625,7 @@ function xuLyTaoHopDong(e) {
     if ([CONFIG.ACTION_COLUMN, CONFIG.BBNT_ACTION_COLUMN].includes(range.getColumn()) &&
         e.value === 'TRUE') {
       range.setValue(false);
-      range.setNote('Bố cục A:AQ chưa đúng. Hãy kiểm tra tiêu đề cột trước khi tạo Word.');
+      range.setNote('Bố cục A:AP chưa đúng. Hãy kiểm tra tiêu đề cột trước khi tạo Word.');
     }
     return;
   }
@@ -1066,16 +1065,16 @@ function taoBbntChoDong_(sheet, row) {
       '{{SO_LUONG_CONG_VIEC}}': values[12],
       '{{NOI_DUNG_KICH_BAN}}': values[10],
       '{{SO_LUONG_KICH_BAN}}': values[11],
-      '{{DANH_GIA_KICH_BAN}}': values[31],
+      '{{DANH_GIA_KICH_BAN}}': values[CONFIG.BBNT_EVALUATION_COLUMNS[0] - 1],
       '{{SO_LUONG_VIDEO}}': values[12],
       '{{KHUNG_VIDEO}}': values[13],
       '{{CHAT_LUONG_VIDEO}}': values[14],
       '{{THOI_LUONG_VIDEO}}': values[15],
       '{{HIEU_UNG_VIDEO}}': values[16],
-      '{{DANH_GIA_VIDEO}}': values[32],
+      '{{DANH_GIA_VIDEO}}': values[CONFIG.BBNT_EVALUATION_COLUMNS[1] - 1],
       '{{NOI_DUNG_DIEN_VIEN}}': values[17],
       '{{SO_LUONG_DIEN_VIEN}}': values[18],
-      '{{DANH_GIA_DIEN_VIEN}}': values[33]
+      '{{DANH_GIA_DIEN_VIEN}}': values[CONFIG.BBNT_EVALUATION_COLUMNS[2] - 1]
     };
     thayBienTrongTaiLieu_(doc, replacements);
     doc.saveAndClose();
@@ -1166,13 +1165,13 @@ function chuyenDuLieuBbntCu() {
 
     // Chỉ các cột BBNT; không chạm tới dữ liệu hợp đồng hoặc nút tải.
     const fields = [
-      { oldIndex: 11, newColumn: 32 }, // L -> AF: Đánh giá Kịch bản
-      { oldIndex: 17, newColumn: 33 }, // R -> AG: Đánh giá Video
-      { oldIndex: 20, newColumn: 34 }, // U -> AH: Đánh giá Diễn viên
-      { oldIndex: 21, newColumn: 35 }, // V -> AI: Word BBNT 01
-      { oldIndex: 22, newColumn: 36 }, // W -> AJ: Word BBNT 02
-      { oldIndex: 23, newColumn: 37 }, // X -> AK: Word BBNT 03
-      { oldIndex: 26, newColumn: 40 }  // AA -> AN: Link FILE CỨNG BBNT
+      { oldIndex: 11, newColumn: CONFIG.BBNT_EVALUATION_COLUMNS[0] }, // L -> AE
+      { oldIndex: 17, newColumn: CONFIG.BBNT_EVALUATION_COLUMNS[1] }, // R -> AF
+      { oldIndex: 20, newColumn: CONFIG.BBNT_EVALUATION_COLUMNS[2] }, // U -> AG
+      { oldIndex: 21, newColumn: CONFIG.BBNT_FIRST_LINK_COLUMN },     // V -> AH
+      { oldIndex: 22, newColumn: CONFIG.BBNT_FIRST_LINK_COLUMN + 1 }, // W -> AI
+      { oldIndex: 23, newColumn: CONFIG.BBNT_FIRST_LINK_COLUMN + 2 }, // X -> AJ
+      { oldIndex: 26, newColumn: CONFIG.BBNT_HARD_LINK_COLUMN }       // AA -> AM
     ];
     const issues = [];
     let transferredRows = 0;
