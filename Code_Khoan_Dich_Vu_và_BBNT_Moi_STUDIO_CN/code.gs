@@ -1,14 +1,14 @@
 /**
  * TỰ ĐỘNG TẠO HỢP ĐỒNG KHOÁN STUDIO CN
  *
- * A:O - Dữ liệu hợp đồng (B là Người làm đơn, N là Số Tài khoản, O là Mở Tại)
+ * A:P - Dữ liệu hợp đồng (C là Bên nhận khoán, O là Số Tài khoản, P là Mở Tại)
  * B là thông tin nội bộ, có thể để trống và không đưa vào Word.
- * P:S - Link Word và nút tạo hợp đồng khoán
- * T:U - FILE CỨNG hợp đồng khoán
- * V   - Đánh giá BBNT
- * W:Z - Link Word và nút tạo BBNT
- * AA:AB - FILE CỨNG BBNT
- * AC:AE - Trạng thái, Thuế TNCN, Ngày Thanh toán
+ * Q:T - Link Word và nút tạo hợp đồng khoán
+ * U:V - FILE CỨNG hợp đồng khoán
+ * W   - Đánh giá BBNT
+ * X:AA - Link Word và nút tạo BBNT
+ * AB:AC - FILE CỨNG BBNT
+ * AD:AF - Trạng thái, Thuế TNCN, Ngày Thanh toán
  *
  * Đặt các biến {{...}} trong Google Docs mẫu theo TEMPLATE_FIELDS ở cuối file.
  * Riêng các số mẫu ở mục 3.2–3.3 được đổi thành biến trên bản sao hợp đồng.
@@ -33,22 +33,25 @@ const CONFIG = {
   WEB_APP_URL: 'https://script.google.com/a/macros/getvini.com/s/AKfycbypX-CAZ3ykjnUJ62SLbUh0Eq5Li9OBeQm-ExZ_DJP9PwMDNw7_Bq8FjwzWDzo5gIUC/exec',
   CENTRAL_NUMBER_URL: 'https://script.google.com/a/macros/getvini.com/s/AKfycbwkG4U2MgM9aywiEcV7yKikOko-Wh0VRqE9OXGg3QC292L9AAxZ3u1mzb9UVrbDERO2hg/exec',
 
-  FIRST_LINK_COLUMN: 16, // P
-  LINK_COUNT: 3,         // P, Q, R
-  ACTION_COLUMN: 19,     // S
-  HARD_UPLOAD_COLUMN: 20, // T
-  HARD_LINK_COLUMN: 21,   // U
-  BBNT_EVALUATION_COLUMN: 22, // V
-  BBNT_FIRST_LINK_COLUMN: 23, // W
-  BBNT_ACTION_COLUMN: 26, // Z
-  BBNT_HARD_UPLOAD_COLUMN: 27, // AA
-  BBNT_HARD_LINK_COLUMN: 28, // AB
+  FIRST_LINK_COLUMN: 17, // Q
+  LINK_COUNT: 3,         // Q, R, S
+  ACTION_COLUMN: 20,     // T
+  HARD_UPLOAD_COLUMN: 21, // U
+  HARD_LINK_COLUMN: 22,   // V
+  BBNT_EVALUATION_COLUMN: 23, // W
+  BBNT_FIRST_LINK_COLUMN: 24, // X
+  BBNT_ACTION_COLUMN: 27, // AA
+  BBNT_HARD_UPLOAD_COLUMN: 28, // AB
+  BBNT_HARD_LINK_COLUMN: 29, // AC
   LINK_PROTECTION_DESCRIPTION: 'KHOA_LINK_HOP_DONG_TU_DONG',
   BBNT_LINK_PROTECTION_DESCRIPTION: 'KHOA_LINK_BBNT_GOP_STUDIO_CN',
   HARD_FILE_PROTECTION_DESCRIPTION: 'KHOA_FILE_CUNG_HOP_DONG_TU_DONG',
   BBNT_HARD_FILE_PROTECTION_DESCRIPTION: 'KHOA_FILE_CUNG_BBNT_GOP_STUDIO_CN',
-  AMOUNT_COLUMN: 12,       // L: Số tiền thực nhận sau thuế
-  AMOUNT_WORDS_COLUMN: 13, // M: Số tiền thực nhận sau thuế bằng chữ (tự điền)
+  CONTRACTOR_COLUMN: 3, // C: BÊN NHẬN KHOÁN (BÊN B)
+  APPLICATION_DATE_COLUMN: 5, // E: Ngày làm đơn
+  COMPLETION_DATE_COLUMN: 12, // L: Ngày hoàn thành công việc
+  AMOUNT_COLUMN: 13,       // M: Số tiền thực nhận sau thuế
+  AMOUNT_WORDS_COLUMN: 14, // N: Số tiền thực nhận sau thuế bằng chữ (tự điền)
   UPLOAD_MAX_SIZE_MB: 10
 };
 
@@ -114,7 +117,7 @@ function onOpen() {
 
 /**
  * Chạy hàm này đúng một lần sau khi dán code.
- * Kiểm tra bố cục A:AE, cài hai nút Word và hai nút FILE CỨNG.
+ * Kiểm tra bố cục A:AF, cài hai nút Word và hai nút FILE CỨNG.
  */
 function caiDatHeThong() {
   const ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
@@ -190,8 +193,8 @@ function caiDatHeThong() {
   thongBaoHopDong_(
     ss,
     coLinkWebAppHopLe_()
-      ? 'Đã tạo nút Word S/Z và FILE CỨNG T/AA.'
-      : 'Đã cài Word. Hãy triển khai Web App và điền WEB_APP_URL để tạo nút T/AA.',
+      ? 'Đã tạo nút Word T/AA và FILE CỨNG U/AB.'
+      : 'Đã cài Word. Hãy triển khai Web App và điền WEB_APP_URL để tạo nút U/AB.',
     'Cài đặt thành công',
     8
   );
@@ -216,7 +219,8 @@ function layUrlWebApp_() {
 }
 
 const MERGED_HEADERS = [
-  'Số hợp đồng', 'Người làm đơn', 'Họ và tên người đề nghị', 'Ngày làm đơn', 'số CCCD',
+  'Số hợp đồng', 'Người làm đơn', 'BÊN NHẬN KHOÁN (BÊN B)',
+  'Họ và tên người đề nghị', 'Ngày làm đơn', 'số CCCD',
   'Mã số thuế', 'Địa chỉ', 'Số điện thoại', 'Tên dự án',
   'Nội dung công việc', 'Ngày hoàn thành công việc',
   'Số tiền thực nhận sau thuế', 'Số tiền thực nhận sau thuế(Bằng chữ)',
@@ -244,7 +248,7 @@ function coBoCucHopDongMoi_(sheet) {
 
 function kiemTraBoCucHopDong_(sheet) {
   if (!coBoCucHopDongMoi_(sheet)) {
-    throw new Error('Bố cục tab gộp STUDIO CN A:AE chưa đúng với danh sách cột đã thống nhất.');
+    throw new Error('Bố cục tab gộp STUDIO CN A:AF chưa đúng với danh sách cột đã thống nhất.');
   }
 }
 
@@ -466,7 +470,7 @@ function layEmailChuSoHuu_(spreadsheet) {
 
 
 // ========================================
-// 2. TỰ ĐIỀN CỘT M VÀ XỬ LÝ CHECKBOX Ở CỘT S/Z
+// 2. TỰ ĐIỀN CỘT L/N VÀ XỬ LÝ CHECKBOX Ở CỘT T/AA
 // ========================================
 
 /** Nhận số Sheets hoặc số tiền nhập dạng 2,160,000 / 2.160.000. */
@@ -521,7 +525,7 @@ function vietSoTienBangChu_(amount) {
     remaining = Math.floor(remaining / 1000);
   }
   if (groups.length > units.length) {
-    throw new Error('Số tiền ở cột L quá lớn để chuyển thành chữ.');
+    throw new Error('Số tiền ở cột M quá lớn để chuyển thành chữ.');
   }
 
   const words = [];
@@ -545,7 +549,7 @@ function capNhatTienThucNhanBangChu_(sheet, row) {
 function tinhThuLaoTruocThue_(soTienThucNhan) {
   const tongThuLao = Math.round(soTienThucNhan / 0.9);
   if (!Number.isSafeInteger(tongThuLao)) {
-    throw new Error('Số tiền thực nhận ở cột L quá lớn để tính thù lao trước thuế.');
+    throw new Error('Số tiền thực nhận ở cột M quá lớn để tính thù lao trước thuế.');
   }
   return {
     tongThuLao: tongThuLao,
@@ -555,6 +559,28 @@ function tinhThuLaoTruocThue_(soTienThucNhan) {
 
 function dinhDangSoTien_(amount) {
   return String(amount).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+}
+
+/** Ngày hoàn thành = Ngày làm đơn + 20 ngày theo lịch. */
+function capNhatNgayHoanThanh_(sheet, row) {
+  const ngayLamDon = String(sheet
+    .getRange(row, CONFIG.APPLICATION_DATE_COLUMN).getDisplayValue() || '').trim();
+  const cell = sheet.getRange(row, CONFIG.COMPLETION_DATE_COLUMN);
+  if (!ngayLamDon) {
+    cell.clearContent();
+    return;
+  }
+  let parts;
+  try {
+    parts = tachNgay_(ngayLamDon);
+  } catch (error) {
+    cell.clearContent();
+    return;
+  }
+  const ngayHoanThanh = new Date(
+    Number(parts.nam), Number(parts.thang) - 1, Number(parts.ngay) + 20
+  );
+  cell.setNumberFormat('dd/MM/yyyy').setValue(ngayHoanThanh);
 }
 
 function xuLyTaoHopDong(e) {
@@ -568,12 +594,22 @@ function xuLyTaoHopDong(e) {
     if ([CONFIG.ACTION_COLUMN, CONFIG.BBNT_ACTION_COLUMN].includes(range.getColumn()) &&
         e.value === 'TRUE') {
       range.setValue(false);
-      range.setNote('Bố cục A:AE chưa đúng. Hãy kiểm tra tiêu đề cột trước khi tạo Word.');
+      range.setNote('Bố cục A:AF chưa đúng. Hãy kiểm tra tiêu đề cột trước khi tạo Word.');
     }
     return;
   }
 
-  // Hỗ trợ cả khi dán nhiều dòng hoặc nhiều cột có chứa L.
+  // Hỗ trợ sửa hoặc dán nhiều dòng có chứa cột E.
+  if (
+    range.getColumn() <= CONFIG.APPLICATION_DATE_COLUMN &&
+    range.getLastColumn() >= CONFIG.APPLICATION_DATE_COLUMN
+  ) {
+    for (let row = Math.max(2, range.getRow()); row <= range.getLastRow(); row++) {
+      capNhatNgayHoanThanh_(sheet, row);
+    }
+  }
+
+  // Hỗ trợ cả khi dán nhiều dòng hoặc nhiều cột có chứa M.
   if (
     range.getColumn() <= CONFIG.AMOUNT_COLUMN &&
     range.getLastColumn() >= CONFIG.AMOUNT_COLUMN
@@ -699,22 +735,26 @@ function taoHopDongChoDong_(sheet, row) {
   kiemTraBoCucHopDong_(sheet);
   xoaCongThucSttCu_(sheet);
 
-  // A:O là dữ liệu, P:R là ba link đã tạo.
+  // A:P là dữ liệu, Q:S là ba link đã tạo.
   const displayValues = sheet.getRange(row, 1, 1, CONFIG.FIRST_LINK_COLUMN + CONFIG.LINK_COUNT - 1)
     .getDisplayValues()[0];
   const rawValues = sheet.getRange(row, 1, 1, CONFIG.FIRST_LINK_COLUMN - 1).getValues()[0];
 
-  const ngayLamDonHienThi = String(displayValues[3] || '').trim();
+  const ngayLamDonHienThi = String(displayValues[CONFIG.APPLICATION_DATE_COLUMN - 1] || '').trim();
 
   if (!ngayLamDonHienThi) {
-    throw new Error('Thiếu Ngày làm đơn ở cột D.');
+    throw new Error('Thiếu Ngày làm đơn ở cột E.');
   }
 
   const ngayKy = tachNgay_(ngayLamDonHienThi);
+  capNhatNgayHoanThanh_(sheet, row);
+  displayValues[CONFIG.COMPLETION_DATE_COLUMN - 1] = sheet
+    .getRange(row, CONFIG.COMPLETION_DATE_COLUMN).getDisplayValue();
 
   const headers = [
     'Số hợp đồng',
     'Người làm đơn',
+    'BÊN NHẬN KHOÁN (BÊN B)',
     'Họ và tên người đề nghị',
     'Ngày làm đơn',
     'Số CCCD',
@@ -738,14 +778,14 @@ function taoHopDongChoDong_(sheet, row) {
 
   const soTienThucNhan = docSoTien_(rawValues[CONFIG.AMOUNT_COLUMN - 1]);
   if (soTienThucNhan === null) {
-    throw new Error('Số tiền thực nhận ở cột L phải là số nguyên lớn hơn 0 (ví dụ: 6.750.000).');
+    throw new Error('Số tiền thực nhận ở cột M phải là số nguyên lớn hơn 0 (ví dụ: 6.750.000).');
   }
   const soTienThucNhanBangChu = vietSoTienBangChu_(soTienThucNhan);
   sheet.getRange(row, CONFIG.AMOUNT_WORDS_COLUMN).setValue(soTienThucNhanBangChu);
   displayValues[CONFIG.AMOUNT_WORDS_COLUMN - 1] = soTienThucNhanBangChu;
   const { tongThuLao, thueTncn } = tinhThuLaoTruocThue_(soTienThucNhan);
 
-  // Cột A do code tự sinh; B là thông tin nội bộ tùy chọn; bắt buộc C:O.
+  // Cột A do code tự sinh; B là thông tin nội bộ tùy chọn; bắt buộc C:P.
   for (let i = 2; i < headers.length; i++) {
     const value = String(displayValues[i] ?? '').trim();
 
@@ -771,13 +811,14 @@ function taoHopDongChoDong_(sheet, row) {
   }
 
   // Kiểm tra ngày hoàn thành trước khi cấp số hợp đồng.
-  const ngayHoanTat = tachNgay_(displayValues[10]);
+  const ngayHoanTat = tachNgay_(displayValues[CONFIG.COMPLETION_DATE_COLUMN - 1]);
   const soHopDong = taoSoHopDongMoi_(sheet, row);
   displayValues[0] = soHopDong;
 
   const [
     stt,
     , // Người làm đơn: chỉ dùng theo dõi nội bộ, không đưa vào Word.
+    benNhanKhoan,
     hoTen,
     ngayLamDon,
     soCccd,
@@ -812,6 +853,7 @@ function taoHopDongChoDong_(sheet, row) {
     const replacements = {
       '{{SO_HD}}': stt,
       '{{STT}}': stt,
+      '{{BEN_NHAN_KHOAN}}': benNhanKhoan,
       '{{HO_TEN}}': hoTen,
       '{{HO_TEN_IN_HOA}}': hoTen.toLocaleUpperCase('vi-VN'),
       '{{NGAY_LAM_DON}}': ngayLamDon,
@@ -874,15 +916,16 @@ function taoHopDongChoDong_(sheet, row) {
   }
 }
 
-/** BBNT STUDIO CN dùng Ký ngày=D, Ngày làm đơn=K trên cùng dòng. */
+/** BBNT STUDIO CN dùng Ký ngày=E, Ngày làm đơn=L trên cùng dòng. */
 function taoBbntChoDong_(sheet, row) {
   kiemTraBoCucHopDong_(sheet);
+  capNhatNgayHoanThanh_(sheet, row);
   const values = sheet.getRange(row, 1, 1, CONFIG.BBNT_HARD_LINK_COLUMN)
     .getDisplayValues()[0];
   const soHopDong = String(values[0] || '').trim();
   if (!soHopDong) throw new Error('Dòng này chưa có Số hợp đồng ở cột A.');
 
-  const requiredColumns = [3, 4, 5, 6, 7, 8, 9, 10, 11, CONFIG.BBNT_EVALUATION_COLUMN];
+  const requiredColumns = [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, CONFIG.BBNT_EVALUATION_COLUMN];
   const missing = requiredColumns.filter(column => {
     const value = String(values[column - 1] || '').trim();
     return !value || laLoiSheet_(value);
@@ -896,11 +939,11 @@ function taoBbntChoDong_(sheet, row) {
   const emptyIndex = links.findIndex(link => !String(link || '').trim());
   if (emptyIndex < 0) throw new Error('Dòng này đã tạo đủ 3 BBNT.');
 
-  const kyNgay = String(values[3]).trim();
-  const ngayLamDonBbnt = String(values[10]).trim();
+  const kyNgay = String(values[CONFIG.APPLICATION_DATE_COLUMN - 1]).trim();
+  const ngayLamDonBbnt = String(values[CONFIG.COMPLETION_DATE_COLUMN - 1]).trim();
   const kyParts = tachNgay_(kyNgay);
   const donParts = tachNgay_(ngayLamDonBbnt);
-  const hoTen = String(values[2]).trim();
+  const hoTen = String(values[3]).trim();
   const lanTao = String(emptyIndex + 1).padStart(2, '0');
   const targetColumn = CONFIG.BBNT_FIRST_LINK_COLUMN + emptyIndex;
   const template = DriveApp.getFileById(layIdGoogleDoc_(CONFIG.BBNT_TEMPLATE_URL));
@@ -919,6 +962,7 @@ function taoBbntChoDong_(sheet, row) {
       '{{SO_BIEN_BAN_NGHIEM_THU}}': soHopDong,
       '{{SO_HOP_DONG}}': soHopDong,
       '{{SO_HD}}': soHopDong,
+      '{{BEN_NHAN_KHOAN}}': values[CONFIG.CONTRACTOR_COLUMN - 1],
       '{{KY_NGAY}}': kyNgay,
       '{{NGAY_KY}}': kyNgay,
       '{{NGAY_KY_NGAY}}': kyParts.ngay,
@@ -930,12 +974,12 @@ function taoBbntChoDong_(sheet, row) {
       '{{NGAY}}': donParts.ngay,
       '{{THANG}}': donParts.thang,
       '{{NAM}}': donParts.nam,
-      '{{SO_CCCD}}': values[4],
-      '{{MA_SO_THUE}}': values[5],
-      '{{DIA_CHI}}': values[6],
-      '{{SO_DIEN_THOAI}}': values[7],
-      '{{TEN_DU_AN}}': values[8],
-      '{{HANG_MUC_CONG_VIEC}}': values[9],
+      '{{SO_CCCD}}': values[5],
+      '{{MA_SO_THUE}}': values[6],
+      '{{DIA_CHI}}': values[7],
+      '{{SO_DIEN_THOAI}}': values[8],
+      '{{TEN_DU_AN}}': values[9],
+      '{{HANG_MUC_CONG_VIEC}}': values[10],
       '{{DANH_GIA}}': values[CONFIG.BBNT_EVALUATION_COLUMN - 1]
     };
     thayBienTrongTaiLieu_(doc, replacements);
@@ -1012,11 +1056,11 @@ function chuyenDuLieuBbntCu() {
       if (code) oldCounts.set(code, (oldCounts.get(code) || 0) + 1);
     });
     const fields = [
-      { oldIndex: 11, newColumn: CONFIG.BBNT_EVALUATION_COLUMN }, // L -> V: Đánh giá
-      { oldIndex: 12, newColumn: CONFIG.BBNT_FIRST_LINK_COLUMN }, // M -> W: Word BBNT 01
-      { oldIndex: 13, newColumn: CONFIG.BBNT_FIRST_LINK_COLUMN + 1 }, // N -> X: Word BBNT 02
-      { oldIndex: 14, newColumn: CONFIG.BBNT_FIRST_LINK_COLUMN + 2 }, // O -> Y: Word BBNT 03
-      { oldIndex: 17, newColumn: CONFIG.BBNT_HARD_LINK_COLUMN }  // R -> AB: Link FILE CỨNG BBNT
+      { oldIndex: 11, newColumn: CONFIG.BBNT_EVALUATION_COLUMN }, // L -> W: Đánh giá
+      { oldIndex: 12, newColumn: CONFIG.BBNT_FIRST_LINK_COLUMN }, // M -> X: Word BBNT 01
+      { oldIndex: 13, newColumn: CONFIG.BBNT_FIRST_LINK_COLUMN + 1 }, // N -> Y: Word BBNT 02
+      { oldIndex: 14, newColumn: CONFIG.BBNT_FIRST_LINK_COLUMN + 2 }, // O -> Z: Word BBNT 03
+      { oldIndex: 17, newColumn: CONFIG.BBNT_HARD_LINK_COLUMN }  // R -> AC: Link FILE CỨNG BBNT
     ];
     const issues = [];
     let transferredRows = 0;
@@ -1312,7 +1356,7 @@ function lamSachTenFile_(name) {
     .trim();
 }
 
-/** Khóa link Word P:R, W:Y và hai cặp FILE CỨNG. */
+/** Khóa link Word Q:S, X:Z và hai cặp FILE CỨNG. */
 function khoaCotLink_(sheet, maxRows) {
   const protectionDescriptions = [
     CONFIG.LINK_PROTECTION_DESCRIPTION,
@@ -1396,6 +1440,7 @@ function khoaCotLink_(sheet, maxRows) {
 
 const TEMPLATE_FIELDS = [
   '{{SO_HD}}',
+  '{{BEN_NHAN_KHOAN}}',
   '{{HO_TEN}}',
   '{{HO_TEN_IN_HOA}}',
   '{{NGAY_LAM_DON}}',
