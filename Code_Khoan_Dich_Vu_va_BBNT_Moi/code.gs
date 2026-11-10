@@ -7,7 +7,6 @@
  * AE:AG - Đánh giá kịch bản, video, diễn viên
  * AH:AK - Link Word và nút tạo BBNT
  * AL:AM - FILE CỨNG BBNT
- * AN:AP - Các cột nghiệp vụ khác
  *
  * Đặt các biến {{...}} trong Google Docs mẫu theo TEMPLATE_FIELDS ở cuối file.
  * Riêng các số mẫu ở mục 3.2–3.3 được đổi thành biến trên bản sao hợp đồng.
@@ -143,7 +142,7 @@ function onOpen() {
 
 /**
  * Chạy hàm này đúng một lần sau khi dán code.
- * Kiểm tra bố cục A:AP, cài hai nút tạo Word và hai nút FILE CỨNG.
+ * Kiểm tra bố cục A:AM, cài hai nút tạo Word và hai nút FILE CỨNG.
  */
 function caiDatHeThong() {
   const ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
@@ -243,8 +242,7 @@ const MERGED_HEADERS = [
   'TẠO WORD_Khoan', 'FILE CỨNG_Khoan', 'Link_FILE_Cung_Khoan',
   'Đánh giá Kịch bản', 'Đánh giá Video', 'Đánh giá Diễn viên',
   'Link_Word_01_BBNT', 'Link_Word_02_BBNT', 'Link_Word_03_BBNT',
-  'TẠO WORD_BBNT', 'FILE CỨNG_BBNT', 'Link_FILE_Cung_BBNT',
-  'Trạng Thái', 'Thuế TNCN', 'Ngày Thanh toán'
+  'TẠO WORD_BBNT', 'FILE CỨNG_BBNT', 'Link_FILE_Cung_BBNT'
 ];
 
 function chuanHoaTieuDe_(value) {
@@ -276,7 +274,7 @@ function kiemTraBoCucHopDong_(sheet, choPhepA1Trong) {
   });
 
   if (saiLech.length) {
-    throw new Error('Bố cục tab gộp A:AP chưa đúng: ' + saiLech.join('; '));
+    throw new Error('Bố cục tab gộp A:AM chưa đúng: ' + saiLech.join('; '));
   }
 }
 
@@ -625,7 +623,7 @@ function xuLyTaoHopDong(e) {
     if ([CONFIG.ACTION_COLUMN, CONFIG.BBNT_ACTION_COLUMN].includes(range.getColumn()) &&
         e.value === 'TRUE') {
       range.setValue(false);
-      range.setNote('Bố cục A:AP chưa đúng. Hãy kiểm tra tiêu đề cột trước khi tạo Word.');
+      range.setNote('Bố cục A:AM chưa đúng. Hãy kiểm tra tiêu đề cột trước khi tạo Word.');
     }
     return;
   }
